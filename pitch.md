@@ -18,15 +18,23 @@ When you begin this step, start a fresh chat so its transcript stays clean. For 
 
 ### Ideas
 
-For each idea worth considering, note what it is, what appeals to you, who it's for, and the main feasibility concerns.
+- **Pocket Museum:** An app where people arrange personal objects, colors, and memories into a small virtual exhibition, then download an exhibition poster. The appeal was visual storytelling and self-expression. It could serve creative people who enjoy reflecting on their lives, but it would require enough content and layout options to make each museum feel distinct.
+- **Personal Quest Generator:** An app that uses a person's interests, energy, available time, and location to create a small real-world quest and a collectible quest card. The appeal was giving the User something fun to do as well as something to save. The main concerns were keeping suggestions safe, practical, and varied.
+- **Tiny World Builder:** An app where choices about climate, culture, landmarks, and inhabitants generate a fictional world and a downloadable map or travel poster. It would appeal to casual gamers and worldbuilding fans, but a convincing map-generation system could become too ambitious for five weeks.
+- **Moodscape:** A wallpaper generator that translates a person's current mood into an abstract atmosphere using color, glow, texture, movement, and density. It would be repeatable and immediately useful, although the visual rules would need enough range to avoid repetitive results.
+- **Personal Constellation:** A wallpaper generator that turns meaningful people, places, and memories into stars and connections. It would create a more lasting keepsake than a random design, but the experience would need careful limits and privacy protections.
 
 ### Choice
 
-Which idea you chose, why, and what you set aside.
+I chose to combine Moodscape and Personal Constellation. The constellation gives the wallpaper personal meaning, while the mood system lets the same meaningful elements take on a different atmosphere each time. The User leaves with a useful digital artifact rather than only seeing a result on a screen, and the live customization and export process make sense as an app.
+
+I set aside Pocket Museum, Personal Quest Generator, and Tiny World Builder. Each could become a strong project, but their core content systems would compete with the time needed to polish the final artifact. I also limited each constellation to five stars representing people, places, or memories. A User who wants to represent more can make additional wallpapers. This keeps each composition readable and makes repeated use part of the concept.
 
 ### Branding
 
-For your chosen idea, explore a few possible titles, logos, and visual branding directions, such as color, type, and tone. Keep it simple.
+The selected working title is **Inner Orbit**. Other directions considered were **Starwoven**, which felt softer and handmade; **Meaning in the Stars**, which was warm but less concise; and **Moodsphere**, which emphasized mood more than personal meaning.
+
+Inner Orbit's working logo is a minimal star orbiting a central point. The visual direction uses midnight blue as the base, electric violet and coral as accents, and clean geometric typography. Glows and gradients can make the interface feel atmospheric, but controls should remain clear and readable. The tone should be reflective and playful rather than mystical or clinical.
 
 ## Pitch
 
@@ -34,48 +42,80 @@ Keep this section to about 1,000 words.
 
 ### Concept
 
-What it is, in a few sentences.
+**Inner Orbit** is an interactive web app for creating personalized constellation wallpapers. A User chooses up to five meaningful people, places, or memories and gives each one a short label. Those choices become stars in a unique constellation. The User then describes their current mood through a few playful visual controls, which change the sky's colors, glow, energy, and atmosphere in a live preview.
+
+The composition can be downloaded as a phone or desktop wallpaper. Inner Orbit does not interpret or score emotions; it is a creative tool that gives personal meaning a visual form.
 
 ### Title and branding
 
-Your working title, logo, and a short description of the visual branding. These may change during development; keep the current branding with the visual rules in `spec.md`.
+The working logo is a small star circling a central point, representing connection and an inner emotional world. The interface will use a midnight-blue foundation, electric-violet and coral accents, restrained gradients, and geometric type. Generated wallpapers may vary according to mood, but the app should remain calm, legible, and consistent. Current visual rules will be recorded in `spec.md`.
 
 ### Why this project
 
-Why you chose it and what makes it worth five weeks.
+I wanted to build an app where the User could walk away with something personal, useful, and fun. A wallpaper remains visible after the interaction ends and can carry meaning without requiring an explanation. The constellation provides a lasting layer while the mood provides a momentary one, so the same stars can look calm one day and energetic another.
+
+The five-week challenge is to combine a clear interaction flow, coherent generative rules, responsive previews, and reliable high-resolution export. Limited inputs must produce results that feel intentional and distinct without overwhelming the User.
 
 ### Users
 
-Who it's for and what they need from it.
+Inner Orbit is for people who find meaning in relationships, places, and memories and enjoy expressing those connections visually.
+
+Users need a short, enjoyable process, immediate visual feedback, and an artifact that feels personal without requiring a detailed story. They also need control over what they enter and confidence that it is not stored or sent elsewhere.
 
 ### Experience goals
 
-What Users should notice, feel, and be able to do.
+Users should see their constellation change with their choices. The experience should feel playful, calm, and personal, inviting reflection without presenting itself as a mental-health assessment.
+
+A User should be able to create up to five labeled stars, categorize each as a person, place, or memory, adjust a few mood qualities, preview the result, choose a phone or desktop format, and download a crisp wallpaper. They can revise choices or start over. Controls should work with a keyboard, use visible labels, maintain contrast, and not require motion.
 
 ### Technical goals
 
-What the system must do and the technical challenges you intend to take on.
+Meaningful items will determine the constellation's structure while mood choices determine its atmosphere. Shared visual rules must prevent collisions and balance compositions at phone and desktop aspect ratios while allowing useful variation.
+
+The preview and export must agree. The app will render a lightweight preview and a higher-resolution download without freezing or exceeding common mobile-browser limits. Personal labels and settings remain in the browser; the MVP needs no account, database, or analytics tied to personal input.
 
 ### Starting point
 
-From scratch, extending one of your previous projects, or building on an open-source project. For open source, name the project and confirm its license permits your use. If you extend existing code, commit the original before your changes so your work is clearly distinguishable.
+I will build Inner Orbit from scratch. The repository currently contains only the Project 5 templates, so its history will show the work created for this project. External libraries, references, fonts, and assets will be credited with their licenses in `research.md`.
 
 ### Tech stack
 
-The technologies you plan to use and why, including any you are new to.
+The app will use semantic HTML, CSS, and plain JavaScript. The Canvas API will draw the constellation and atmosphere, update the preview, and generate PNG files. Standard HTML controls will keep input keyboard-accessible and understandable outside the canvas.
+
+The new technical work is designing generative Canvas rules, scaling one composition across aspect ratios and resolutions, and testing downloads across browsers. A library will be considered only if browser APIs cannot meet a tested need reliably.
 
 ### MVP or critical function
 
-The smallest version that genuinely works end to end, or the riskiest function you will validate first, and how you will know it works.
+The MVP is one complete path from personal choices to a usable wallpaper: add one to five labeled and categorized stars, make limited mood choices, preview the constellation, select phone or desktop, and download a PNG.
+
+The first critical proof is clean preview and export at different sizes. The file must have the intended dimensions, preserve the preview's composition, keep content inside safe areas, and avoid visible blur. Tests will cover label limits, one- and five-star constellations, contrasting moods, and representative phone and desktop dimensions.
 
 ### Five-week map
 
-What each phase should produce, ending in a project that is publicly usable online or in person.
+**Phase 1 — Ideate and pitch:** Approve the concept, scope, title, and initial visual direction.
+
+**Phase 2 — Prove the core:** Build an end-to-end prototype that creates a constellation, applies two visibly different moods, and exports a correctly sized PNG.
+
+**Phase 3 — Revise and expand:** Complete the input flow and visual rules, improve composition, and test keyboard use, contrast, label limits, and responsive layout.
+
+**Phase 4 — Polish and peer test:** Complete both formats, refine branding and variation, handle errors and edit paths, and put a stable version online for peer review.
+
+**Phase 5 — Finish and showcase:** Revise from testing, verify the public build and downloads, complete documentation and credits, and prepare the demonstration.
 
 ### Stretch goals
 
-Additional features in priority order, so running short on time removes the least important work first.
+1. Save a small collection of recent designs locally in the browser.
+2. Add seeded variations so a User can explore alternate arrangements without changing the meaning or mood.
+3. Offer an optional reduced-motion animation in the live preview while keeping exported wallpapers still.
+4. Add more wallpaper aspect ratios or a custom-size option.
+5. Allow an optional short dedication or date in the exported design.
+
+Accounts, public galleries, social feeds, server-side storage, and AI image generation are not stretch goals because they would change the project's privacy model and core scope.
 
 ### Risks
 
-What could block or derail the project, and how you will find out early.
+The largest technical risk is high-resolution export that matches the preview and works on mobile devices. Phase 2 will test this before heavy styling. Constrained placement and safe areas will address collisions and unreadable labels, then be tested with input extremes.
+
+The main design risk is giving Users too little influence, making results feel random, or too many controls, making the app feel like design software. Peer observation will test whether choices have understandable effects and outputs offer meaningful variety.
+
+Personal labels may be sensitive, so data will stay in the browser and the app will explain that behavior plainly. Canvas visuals can also exclude Users if controls are unlabeled or meaning depends on color and motion. Semantic controls, keyboard testing, visible focus, contrast, reduced-motion support, and textual confirmation are core requirements.
