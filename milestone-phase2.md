@@ -1,6 +1,6 @@
 # Inner Orbit — Phase 2 Milestone Handoff
 
-**For:** Studio director · **Date:** November 9, 2026 · **Status:** working proof built and desktop-tested; **iPhone 15 Pro test not yet performed**
+**For:** Studio director · **Date:** November 9, 2026 · **Status:** working proof built, desktop-tested, and run end to end by the Developer on an iPhone 15 Pro
 
 ## Decision requested
 
@@ -38,15 +38,17 @@ Tested in headless Chrome on a desktop (details in `plan.md`):
 
 ## iPhone results
 
-**Not yet performed.** The required test is the Developer's own iPhone 15 Pro in Safari: a real memory, both moods, five repeated exports, saving to Photos, and setting the PNG as the Lock Screen. This section will be completed from the Developer's observations. Until then Phase 2's critical function is **unproven on the target device**.
+Performed by the Developer on their iPhone 15 Pro in Safari, using the public GitHub Pages build (`https://annascho239.github.io/project5/`). The Developer reported that they completed a real memory, exported in both Calm and Energized, exported five times in one session with no problems, saved a PNG to Photos, and set it as the Lock Screen, and that the result looks good.
+
+Not recorded: the iOS version, specific coverage by the Lock Screen clock, widgets, and controls, and the Developer's verdict on text size and the provisional safe margins. These are observations from the Developer's own report; the Agent did not run the device test.
 
 ## Limitations and open risks
 
 - The map is an astronomical interpretation, not a photograph. It does not show weather, terrain, buildings, light pollution, or exact naked-eye visibility.
 - The sky is enlarged to fill the screen, so the horizon and the sky nearest it are cropped out.
 - Only the names of the 22 most prominent constellations are shown, because more collided at phone size. Some names near the screen edge are partly cut off.
-- The safe margins for the text are provisional until the real Lock Screen test.
-- The sky is drawn on a canvas about 2,870 px wide. Memory use and speed on the iPhone are untested. d3-celestial is an older library and depends on D3 version 3.
+- The safe margins for the text are still provisional; the Developer reported the Lock Screen result looks good but has not recorded margin details.
+- The sky is drawn on a canvas about 2,870 px wide. The Developer reported five exports with no problems; speed and memory were not measured. d3-celestial is an older library and depends on D3 version 3.
 - The place search needs a network connection and a third-party service.
 - The Open-Meteo place search is an external dependency with its own usage terms. Star positions come from catalog data and are not independently validated.
 - Only one device size and two moods are built so far.
@@ -62,6 +64,5 @@ License texts and sources are in `vendor/THIRD_PARTY.md` and `vendor/licenses/`.
 
 ## Next steps if approved
 
-1. Complete the iPhone 15 Pro test and record the results here.
-2. Phase 3: refine the flow and composition from device evidence, then update `pitch.md` to the approved scope.
-3. Remove the superseded star-generation logic and the isolated test pages once the real-sky path passes on the device, with the Developer's approval.
+1. Phase 3: refine the flow and composition from device evidence, then update `pitch.md` to the approved scope.
+2. Remove the superseded star-generation logic and the isolated test pages once the real-sky path passes on the device, with the Developer's approval.

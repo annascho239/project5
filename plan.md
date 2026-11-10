@@ -61,30 +61,30 @@ Stop and review if d3-celestial cannot reliably render both sizes or Safari show
 
 The Agent can prepare this test but cannot mark it passed without the Developer's direct observations.
 
-**Checkpoint 5 record (Developer fills in; the Agent does not mark any row passed).**
+**Checkpoint 5 record (the Developer's observations, reported in chat on Nov 9, 2026; the Agent recorded them without adding detail).**
 
-Build under test: uncommitted checkpoint 3 build, served from a staging copy on the local network. Device: iPhone 15 Pro, Safari, iOS version: ____
+Build under test: commit `76292ee` (full-bleed sky) on GitHub Pages, `https://annascho239.github.io/project5/`. Device: iPhone 15 Pro, Safari, iOS version: not recorded.
 
 | Step | What to do | Observed result |
 |---|---|---|
-| 1 | Open the page; complete a real memory (title, Find place, choose, date, time) | |
-| 2 | Compare the preview with what you expect: map, text, no stretching | |
-| 3 | Calm: tap Create iPhone wallpaper; note download prompt/behavior | |
-| 4 | Energized: repeat | |
-| 5 | Repeat export 5 times in one session; note freezes, crashes, reloads, lost entries | |
-| 6 | Save a PNG to Photos | |
-| 7 | Set it as the Lock Screen; note what the clock, widgets, and bottom controls cover | |
-| 8 | Compare Lock Screen result with the preview: crop, readability, text size | |
-| 9 | Try a place with a DST case if you like (Chicago, 2025-03-09, 2:30 AM should be rejected) | |
+| 1 | Open the page; complete a real memory (title, Find place, choose, date, time) | Completed (reported) |
+| 2 | Compare the preview with what you expect: map, text, no stretching | "Looks good" (reported) |
+| 3 | Calm: tap Create iPhone wallpaper; note download prompt/behavior | Exported; no problems reported |
+| 4 | Energized: repeat | Exported; no problems reported |
+| 5 | Repeat export 5 times in one session; note freezes, crashes, reloads, lost entries | Completed with no problems (reported) |
+| 6 | Save a PNG to Photos | Completed (reported) |
+| 7 | Set it as the Lock Screen; note what the clock, widgets, and bottom controls cover | Set as Lock Screen; overall "looks good"; specific clock/widget coverage not recorded |
+| 8 | Compare Lock Screen result with the preview: crop, readability, text size | Overall "looks good"; no specific crop or readability issue reported |
+| 9 | Try a place with a DST case if you like (Chicago, 2025-03-09, 2:30 AM should be rejected) | Not reported (optional; covered by desktop tests) |
 
-Also record: any wording that confused you, whether the map text is large enough, and whether the safe margins (10% sides, nothing above 30% height) were right.
+Not yet recorded: iOS version, any confusing wording, whether the map text size is right, and whether the text safe margins (10% sides, nothing above 30% height) were right. The margins stay provisional until the Developer states them. Phase 2's device criterion is met on the Developer's report of the full flow, five exports, Photos, and Lock Screen.
 
 ### 6. Milestone handoff
 
 - Present the original pitch, evidence motivating the change, working proof, limitations, licenses/credits, and iPhone results.
 - Ask the Studio director to approve the scope change before editing `pitch.md` or treating it as final scope.
 
-**Status:** Handoff drafted November 9, 2026 as `milestone-phase2.md`. It states that the iPhone results are not yet performed; complete that section from the Developer's checkpoint 5 observations before treating the milestone as ready. Not sent, and `pitch.md` is unchanged.
+**Status:** Handoff drafted November 9, 2026 as `milestone-phase2.md` and updated with the Developer's iPhone report. Not yet sent to the Studio director, and `pitch.md` is unchanged.
 
 ## Current evidence
 
