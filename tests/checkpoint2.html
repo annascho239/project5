@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Checkpoint 2 form and resolved-state checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { width: 390px; height: 900px; border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" src="../index.html" title="Inner Orbit under test"></iframe>
+
+  <script>
+    (function () {
+      "use strict";
+      var frame = document.getElementById("app");
+      var checks = document.getElementById("checks");
+      var allPassed = true;
+      var requests = [];
+
+      function record(label, passed, detail) {
+        allPassed = allPassed && passed;
+        var item = document.createElement("li");
+        item.dataset.pass = String(passed);
+        item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+        checks.appendChild(item);
+      }
+      function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+      var win, doc;
+      function $(selector) { return doc.querySelector(selector); }
+      function type(selector, value, eventName) {
+        var el = $(selector);
+        el.value = value;
+        el.dispatchEvent(new win.Event(eventName || "input", { bubbles: true }));
+      }
+      function canvasData() { return $("#sky-map canvas").toDataURL(); }
+      function pick(name, value) {
+        var radio = doc.querySelector('input[name="' + name + '"][value="' + value + '"]');
+        radio.checked = true;
+        radio.dispatchEvent(new win.Event("change", { bubbles: true }));
+      }
+      async function search(text) {
+        type("#place-query", text);
+        $("#place-search").click();
+        for (var i = 0; i < 100 && !$("#place-options input"); i += 1) await sleep(100);
+      }
+      async function choosePlace(text, labelPart) {
+        await search(text);
+        var cards = [].slice.call(doc.querySelectorAll("#place-options .choice-card"));
+        var index = cards.findIndex(function (card) { return card.textContent.indexOf(labelPart) !== -1; });
+        if (index < 0) return false;
+        pick("place-choice", index);
+        return true;
+      }
+      function setWhen(date, time) { type("#local-date", date); type("#local-time", time); }
+      function summaryText() { return $("#result-summary").textContent; }
+      function ready() { return $(".phone-frame").dataset.ready === "true"; }
+
+      async function run() {
+        for (var tries = 0; tries < 100; tries += 1) {
+          var d = frame.contentDocument;
+          if (d && d.querySelector("#submit-button") && d.querySelector("#sky-map canvas")) break;
+          await sleep(100);
+        }
+        win = frame.contentWindow; doc = frame.contentDocument;
+        await sleep(500);
+
+        // Record every request the app makes.
+        var realFetch = win.fetch.bind(win);
+        win.fetch = function (url) { requests.push(String(url)); return realFetch(url); };
+
+        record("no horizontal overflow at 390px", doc.documentElement.scrollWidth <= 390,
+          "scrollWidth " + doc.documentElement.scrollWidth);
+        var unlabeled = [].slice.call(doc.querySelectorAll("#memory-form input, #memory-form button")).filter(function (el) {
+          return !(el.labels && el.labels.length) && !el.textContent.trim() && !el.getAttribute("aria-label");
+        });
+        record("every control has an accessible name", unlabeled.length === 0, unlabeled.length + " unlabeled");
+
+        // Validation on empty submit
+        $("#submit-button").click();
+        await sleep(100);
+        var invalid = doc.querySelectorAll('[aria-invalid="true"]').length;
+        record("empty submit flags title, place, date, and time and focuses the first",
+          invalid === 4 && doc.activeElement.id === "memory-title", invalid + " invalid, focus " + doc.activeElement.id);
+
+        // Chicago search, selection, instant
+        type("#memory-title", "Our first night in Chicago");
+        var found = await choosePlace("Chicago", "Illinois");
+        var chicagoCard = [].slice.call(doc.querySelectorAll("#place-options .choice-card")).filter(function (c) {
+          return c.textContent.indexOf("Illinois") !== -1;
+        })[0];
+        record("Chicago search offers Chicago, Illinois with America/Chicago",
+          found && chicagoCard.textContent.indexOf("America/Chicago") !== -1, chicagoCard && chicagoCard.textContent.replace(/\s+/g, " ").trim());
+        record("search returned several distinguishable candidates",
+          doc.querySelectorAll("#place-options .choice-card").length > 1, doc.querySelectorAll("#place-options .choice-card").length + " results");
+
+        setWhen("2025-01-01", "21:00");
+        await sleep(300);
+        var chicagoSky = ready() ? canvasData() : null;
+        record("Chicago 9:00 PM local resolves to 2025-01-02T03:00Z", summaryText().indexOf("America/Chicago") !== -1 && ready() &&
+          summaryText().indexOf("CST") !== -1 && summaryText().indexOf("9:00 PM") !== -1, summaryText());
+        record("summary states above-horizon meaning, place, zone, and mood",
+          /above the horizon/.test(summaryText()) && /Calm/.test(summaryText()) && /Our first night/.test(summaryText()));
+
+        // Time change alters the sky, keeps memory and mood
+        setWhen("2025-01-01", "03:00");
+        await sleep(300);
+        var laterSky = canvasData();
+        record("changing time by 6 hours changes the sky and keeps title/mood/place",
+          laterSky !== chicagoSky && /Our first night/.test(summaryText()) && /Calm/.test(summaryText()) && /Chicago/.test(summaryText()));
+
+        // Mood changes styling only: the projected star positions must not move
+        function projected() {
+          return [[83.82, -5.39], [88.79, 7.41], [101.29, -16.72]].map(function (c) {
+            var p = win.Celestial.mapProjection(c);
+            var canvas = $("#sky-map canvas");
+            return [p[0] / canvas.width, p[1] / canvas.height].map(function (v) { return v.toFixed(5); }).join(",");
+          }).join(";");
+        }
+        var beforeMood = projected();
+        var beforeSky = win.Celestial.skyview();
+        pick("mood", "energized");
+        await sleep(400);
+        var afterSky = win.Celestial.skyview();
+        record("mood changes the summary but not the astronomy",
+          projected() === beforeMood && beforeSky.date.getTime() === afterSky.date.getTime() &&
+          beforeSky.location.join() === afterSky.location.join() && /Energized/.test(summaryText()));
+        pick("mood", "calm");
+
+        // Distant location, same local input
+        await choosePlace("Sydney", "New South Wales");
+        await sleep(300);
+        record("same local input in Sydney produces a different map",
+          ready() && canvasData() !== chicagoSky && /Australia\/Sydney/.test(summaryText()), summaryText().slice(0, 120));
+
+        // DST gap and ambiguity in Chicago
+        await choosePlace("Chicago", "Illinois");
+        setWhen("2025-03-09", "02:30");
+        await sleep(200);
+        record("DST gap is rejected with a readable error and no sky",
+          !ready() && /does not exist/.test($("#local-time-error").textContent) && $("#local-time").getAttribute("aria-invalid") === "true",
+          $("#local-time-error").textContent);
+
+        setWhen("2025-11-02", "01:30");
+        await sleep(200);
+        record("repeated fall-back time asks for earlier or later",
+          !$("#time-choice").hidden && !ready() && doc.querySelectorAll('input[name="time-choice"]').length === 2,
+          $("#time-choice-options").textContent.replace(/\s+/g, " ").trim());
+        pick("time-choice", "earlier");
+        await sleep(200);
+        var earlierSummary = summaryText();
+        pick("time-choice", "later");
+        await sleep(200);
+        var laterSummary = summaryText();
+        record("earlier and later resolve to different offsets",
+          /CDT/.test(earlierSummary) && /CST/.test(laterSummary) && ready(), "earlier CDT / later CST");
+
+        // Stale selection
+        type("#place-query", "Chicag");
+        await sleep(100);
+        record("editing place text invalidates selection and hides results",
+          !ready() && $("#place-results").hidden && /selected place/.test(summaryText()));
+
+        // Network failure keeps other input
+        win.fetch = function () { return Promise.reject(new TypeError("offline")); };
+        $("#place-search").click();
+        await sleep(300);
+        record("network failure shows readable error and preserves other fields",
+          /failed/.test($("#place-status").textContent) && $("#memory-title").value === "Our first night in Chicago" &&
+          $("#local-date").value === "2025-11-02" && !$("#place-search").disabled, $("#place-status").textContent);
+
+        // Privacy
+        var leaked = requests.filter(function (url) {
+          return /first|night|2025|21:00|energized|calm|mood/i.test(decodeURIComponent(url));
+        });
+        record("requests contain only place-search text and parameters",
+          requests.length >= 3 && requests.every(function (url) { return url.indexOf("https://geocoding-api.open-meteo.com/v1/search?name=") === 0; }) && leaked.length === 0,
+          requests.length + " requests: " + requests.join(" | ") + "; matched: " + leaked.join(" | "));
+
+        document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — checkpoint 2 checks";
+        document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+      }
+
+      run().catch(function (error) {
+        record("harness error", false, error && error.stack || String(error));
+        document.getElementById("summary").textContent = "FAIL — harness error";
+        document.title = "DONE FAIL";
+      });
+    }());
+  </script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Checkpoint 3 composition and export checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { width: 390px; height: 900px; border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" src="../index.html" title="Inner Orbit under test"></iframe>
+
+  <script>
+    (function () {
+      "use strict";
+      var W = 1179, H = 2556;
+      var frame = document.getElementById("app");
+      var checks = document.getElementById("checks");
+      var allPassed = true;
+
+      function record(label, passed, detail) {
+        allPassed = allPassed && passed;
+        var item = document.createElement("li");
+        item.dataset.pass = String(passed);
+        item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+        checks.appendChild(item);
+      }
+      function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+      var win, doc, blobs = [], created = 0, revoked = 0;
+      function $(selector) { return doc.querySelector(selector); }
+      function type(selector, value) {
+        var el = $(selector);
+        el.value = value;
+        el.dispatchEvent(new win.Event("input", { bubbles: true }));
+      }
+      function pick(name, value) {
+        var radio = doc.querySelector('input[name="' + name + '"][value="' + value + '"]');
+        radio.checked = true;
+        radio.dispatchEvent(new win.Event("change", { bubbles: true }));
+      }
+      async function choosePlace(text, labelPart) {
+        type("#place-query", text);
+        $("#place-search").click();
+        for (var i = 0; i < 100 && !$("#place-options input"); i += 1) await sleep(100);
+        var cards = [].slice.call(doc.querySelectorAll("#place-options .choice-card"));
+        pick("place-choice", cards.findIndex(function (c) { return c.textContent.indexOf(labelPart) !== -1; }));
+      }
+      function status() { return $("#app-status").textContent; }
+
+      // Click the real submit button and return the PNG blob the app tried to download.
+      async function exportViaUi() {
+        blobs.length = 0;
+        $("#submit-button").click();
+        await sleep(50);
+        for (var i = 0; i < 300 && ($("#submit-button").disabled || /Creating/.test(status())); i += 1) await sleep(100);
+        return blobs[blobs.length - 1] || null;
+      }
+
+      // The app encodes a full-size canvas with toBlob(); copy its pixels at that moment.
+      var lastExportCanvas = null;
+      function lastPixels() {
+        var canvas = lastExportCanvas;
+        var ctx = canvas.getContext("2d");
+        return { canvas: canvas, ctx: ctx, width: canvas.width, height: canvas.height, data: ctx.getImageData(0, 0, canvas.width, canvas.height).data };
+      }
+      // Bounding box of pixels brighter than `threshold` inside a rectangle.
+      function brightBox(img, x0, y0, x1, y1, threshold) {
+        var box = null;
+        for (var y = y0; y < y1; y += 1) {
+          for (var x = x0; x < x1; x += 1) {
+            var i = (y * img.width + x) * 4;
+            if (Math.max(img.data[i], img.data[i + 1], img.data[i + 2]) > threshold) {
+              if (!box) box = { minX: x, maxX: x, minY: y, maxY: y };
+              if (x < box.minX) box.minX = x;
+              if (x > box.maxX) box.maxX = x;
+              if (y < box.minY) box.minY = y;
+              if (y > box.maxY) box.maxY = y;
+            }
+          }
+        }
+        return box;
+      }
+      // Text-only render (no sky) so star pixels do not count as text.
+      function textBox() {
+        var canvas = document.createElement("canvas");
+        canvas.width = W; canvas.height = H;
+        var ctx = canvas.getContext("2d");
+        win.renderWallpaper(ctx, W, H, win.wallpaperContent(), null);
+        var data = ctx.getImageData(0, 0, W, H).data;
+        return brightBox({ width: W, data: data }, 0, 0, W, H, 150);
+      }
+      function brightCount(img, x0, y0, x1, y1, threshold) {
+        var count = 0;
+        for (var y = y0; y < y1; y += 2) {
+          for (var x = x0; x < x1; x += 2) {
+            var i = (y * img.width + x) * 4;
+            if (Math.max(img.data[i], img.data[i + 1], img.data[i + 2]) > threshold) count += 1;
+          }
+        }
+        return count;
+      }
+      function meanDifference(a, b, x0, y0, x1, y1) {
+        var total = 0, count = 0;
+        for (var y = y0; y < y1; y += 1) {
+          for (var x = x0; x < x1; x += 1) {
+            var i = (y * a.width + x) * 4;
+            total += Math.abs(a.data[i] - b.data[i]) + Math.abs(a.data[i + 1] - b.data[i + 1]) + Math.abs(a.data[i + 2] - b.data[i + 2]);
+            count += 3;
+          }
+        }
+        return total / count;
+      }
+      function projected() {
+        var canvas = $("#sky-map canvas");
+        return [[83.82, -5.39], [88.79, 7.41], [101.29, -16.72]].map(function (c) {
+          var p = win.Celestial.mapProjection(c);
+          return (p[0] / canvas.width).toFixed(4) + "," + (p[1] / canvas.height).toFixed(4);
+        }).join(";");
+      }
+      async function header(blob) {
+        var bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+        var view = new DataView(bytes.buffer);
+        return { signature: Array.prototype.slice.call(bytes, 0, 8).join(","), width: view.getUint32(16), height: view.getUint32(20) };
+      }
+
+      async function run() {
+        for (var tries = 0; tries < 100; tries += 1) {
+          var d = frame.contentDocument;
+          if (d && d.querySelector("#submit-button") && d.querySelector("#sky-map canvas")) break;
+          await sleep(100);
+        }
+        win = frame.contentWindow; doc = frame.contentDocument;
+        await sleep(500);
+
+        // Capture downloads instead of saving files; count blob URL lifecycle.
+        var realCreate = win.URL.createObjectURL.bind(win.URL), realRevoke = win.URL.revokeObjectURL.bind(win.URL);
+        win.URL.createObjectURL = function (blob) { created += 1; blobs.push(blob); return realCreate(blob); };
+        win.URL.revokeObjectURL = function (url) { revoked += 1; return realRevoke(url); };
+        win.HTMLAnchorElement.prototype.click = function () {};
+        var originalToBlob = win.HTMLCanvasElement.prototype.toBlob;
+        win.HTMLCanvasElement.prototype.toBlob = function () {
+          if (this.width === W && this.height === H) {
+            lastExportCanvas = document.createElement("canvas");
+            lastExportCanvas.width = W; lastExportCanvas.height = H;
+            lastExportCanvas.getContext("2d").drawImage(this, 0, 0);
+          }
+          return originalToBlob.apply(this, arguments);
+        };
+
+        type("#memory-title", "Our first night in Chicago");
+        await choosePlace("Chicago", "Illinois");
+        type("#local-date", "2025-01-01");
+        type("#local-time", "21:00");
+        await sleep(600);
+
+        // A. PNG file
+        var calmBlob = await exportViaUi();
+        var head = calmBlob && await header(calmBlob);
+        record("export is a nonempty PNG of exactly 1179 × 2556",
+          !!calmBlob && head.signature === "137,80,78,71,13,10,26,10" && head.width === W && head.height === H && calmBlob.size > 50000,
+          head ? head.width + " × " + head.height + ", " + calmBlob.size.toLocaleString() + " bytes" : "no blob");
+        var calm = lastPixels();
+        record("success message shown and button re-enabled", /Wallpaper created/.test(status()) && !$("#submit-button").disabled, status());
+
+        // B. Preview and export share one composition
+        var preview = $("#preview-canvas");
+        var previewPixels = { width: preview.width, height: preview.height, data: preview.getContext("2d").getImageData(0, 0, preview.width, preview.height).data };
+        var shrunk = document.createElement("canvas");
+        shrunk.width = preview.width; shrunk.height = preview.height;
+        var sctx = shrunk.getContext("2d");
+        sctx.imageSmoothingQuality = "high";
+        sctx.drawImage(calm.canvas, 0, 0, preview.width, preview.height);
+        var shrunkPixels = { width: shrunk.width, height: shrunk.height, data: sctx.getImageData(0, 0, shrunk.width, shrunk.height).data };
+        var difference = meanDifference(previewPixels, shrunkPixels, 0, 0, preview.width, preview.height);
+        record("preview matches the exported composition", difference < 8,
+          "mean channel difference " + difference.toFixed(2) + " of 255 at " + preview.width + " × " + preview.height);
+        record("preview keeps the iPhone 15 Pro ratio", Math.abs(preview.width / preview.height - W / H) < 0.01,
+          (preview.width / preview.height).toFixed(4) + " vs " + (W / H).toFixed(4));
+
+        // C. The sky fills the screen; the text keeps to the safe region
+        var emptyTiles = [];
+        for (var row = 0; row < 4; row += 1) {
+          for (var col = 0; col < 3; col += 1) {
+            var count = brightCount(calm, Math.floor(col * W / 3), Math.floor(row * H * 0.15), Math.floor((col + 1) * W / 3), Math.floor((row + 1) * H * 0.15), 200);
+            if (count < 15) emptyTiles.push(row + "," + col + "=" + count);
+          }
+        }
+        record("sky reaches every part of the screen above the text fade", emptyTiles.length === 0,
+          emptyTiles.length ? "sparse tiles " + emptyTiles.join(" ") : "all 12 tiles above 60% height contain stars or lines");
+        var diameter = win.skyDiameter(W, H);
+        record("sky disc covers the screen diagonal so its horizon edge is off-screen",
+          diameter > Math.hypot(W, H), diameter + " px vs diagonal " + Math.hypot(W, H).toFixed(0));
+        var textBounds = textBox();
+        record("text stays inside the 10% side margins, below 30% height and above 90%",
+          !!textBounds && textBounds.minX >= W * 0.1 && textBounds.maxX <= W * 0.9 && textBounds.minY >= H * 0.3 && textBounds.maxY <= H * 0.9,
+          textBounds ? "x " + textBounds.minX + "–" + textBounds.maxX + " (of " + Math.round(W * 0.1) + "–" + Math.round(W * 0.9) + "), y " + textBounds.minY + "–" + textBounds.maxY + " (limit " + Math.round(H * 0.3) + "–" + Math.round(H * 0.9) + ")" : "no text found");
+        var liveCanvas = $("#sky-map canvas");
+        record("sky canvas is not inflated by the device pixel ratio",
+          liveCanvas.width <= diameter + 2, liveCanvas.width + " px wide at devicePixelRatio " + win.devicePixelRatio);
+
+        // D. Mood changes style but not astronomy
+        var calmPoints = projected();
+        pick("mood", "energized");
+        await sleep(600);
+        var energizedBlob = await exportViaUi();
+        var energized = lastPixels();
+        record("mood does not move the astronomy", projected() === calmPoints, calmPoints);
+        record("Calm and Energized exports are visibly different",
+          meanDifference(calm, energized, 0, 0, W, H) > 10, "mean difference " + meanDifference(calm, energized, 0, 0, W, H).toFixed(1));
+        var calmTopLeft = calm.data.slice(0, 4).join(","), energizedTopLeft = energized.data.slice(0, 4).join(",");
+        record("mood palettes differ at the background", calmTopLeft !== energizedTopLeft, calmTopLeft + " vs " + energizedTopLeft);
+        pick("mood", "calm");
+        await sleep(600);
+
+        // E. Time and place change the map region
+        type("#local-time", "03:00");
+        await sleep(600);
+        var lateBlob = await exportViaUi();
+        var late = lastPixels();
+        var mapRegionDiff = meanDifference(calm, late, Math.floor(W * 0.1), Math.floor(H * 0.34), Math.floor(W * 0.9), Math.floor(H * 0.7));
+        record("changing the time changes the exported sky", mapRegionDiff > 5, "map-region difference " + mapRegionDiff.toFixed(1));
+        type("#local-time", "21:00");
+        await sleep(600);
+
+        // F. Repeated export and cleanup
+        var canvasesBefore = doc.querySelectorAll("canvas").length;
+        await sleep(1500); // let the previous export finish revoking its URL
+        created = 0; revoked = 0;
+        var successes = 0;
+        for (var n = 0; n < 5; n += 1) {
+          var again = await exportViaUi();
+          if (again && again.size > 50000 && /Wallpaper created/.test(status())) successes += 1;
+        }
+        await sleep(1500);
+        record("five consecutive exports succeed", successes === 5, successes + " of 5");
+        record("no full-size canvases remain in the document", doc.querySelectorAll("canvas").length === canvasesBefore,
+          canvasesBefore + " canvases before and after");
+        record("every blob URL is revoked", created === 5 && revoked === 5, created + " created, " + revoked + " revoked");
+
+        // G. Forced failure keeps input and allows retry
+        var realToBlob = win.HTMLCanvasElement.prototype.toBlob;
+        win.HTMLCanvasElement.prototype.toBlob = function (callback) { callback(null); };
+        await exportViaUi();
+        record("encoding failure shows a readable error",
+          /couldn't create/.test(status()) && $("#submit-button").disabled === false, status());
+        record("failure preserves entries", $("#memory-title").value === "Our first night in Chicago" && $("#local-date").value === "2025-01-01");
+        win.HTMLCanvasElement.prototype.toBlob = realToBlob;
+        var retry = await exportViaUi();
+        record("retry after failure succeeds", !!retry && /Wallpaper created/.test(status()));
+
+        // H. Long title wraps and stays safe
+        type("#memory-title", "The long summer evening we stayed up late talking about everything and nothing");
+        await sleep(600);
+        await exportViaUi();
+        var longBox = textBox();
+        record("a very long title wraps within the safe region",
+          !!longBox && longBox.minX >= W * 0.1 && longBox.maxX <= W * 0.9 && longBox.maxY <= H * 0.9,
+          longBox ? "x " + longBox.minX + "–" + longBox.maxX + ", bottom y " + longBox.maxY : "no text");
+
+        document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — checkpoint 3 checks";
+        document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+      }
+
+      run().catch(function (error) {
+        record("harness error", false, error && error.stack || String(error));
+        document.getElementById("summary").textContent = "FAIL — harness error";
+        document.title = "DONE FAIL";
+      });
+    }());
+  </script>
+</body>
+</html>

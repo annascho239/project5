@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inner Orbit real-sky renderer proof</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #080615; color: #f7f2ff; }
+    main { width: min(92vw, 760px); margin: 2rem auto; }
+    h1 { margin-bottom: .4rem; font-size: clamp(1.5rem, 4vw, 2.4rem); }
+    p { color: #c9c0da; line-height: 1.5; }
+    #sky-map { width: min(88vw, 420px); margin: 1.5rem auto; }
+    #sky-map canvas { display: block; max-width: 100%; height: auto !important; border-radius: 50%; }
+    #celestial-form, #error { display: none !important; }
+    #results { padding: 1rem 1.25rem; border: 1px solid #594d75; border-radius: 1rem; background: #120d25; }
+    #results[data-status="PASS"] { border-color: #78d8ad; }
+    #results[data-status="FAIL"] { border-color: #ff7d86; }
+    li { margin: .45rem 0; }
+    button { min-height: 44px; padding: .65rem 1rem; border: 0; border-radius: 999px; font: inherit; font-weight: 700; color: #130b21; background: #d8b4ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Real-sky renderer proof</h1>
+    <p>Chicago · January 1, 2025 · 9:00 PM CST. This isolated checkpoint tests one sky at two Canvas sizes before the main app changes.</p>
+    <div id="sky-map" aria-label="Circular all-sky map for the Chicago test case"></div>
+    <section id="results" data-status="RUNNING" aria-live="polite">
+      <strong id="summary">Loading astronomy data…</strong>
+      <ul id="checks"></ul>
+      <button id="rerun" type="button" hidden>Run again</button>
+    </section>
+  </main>
+
+  <script src="../vendor/d3/d3.v3.5.17.min.js"></script>
+  <script src="../vendor/d3-celestial/celestial.min.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      var PREVIEW_SIZE = 360;
+      var EXPORT_MAP_SIZE = 900;
+      var TEST_SKY = {
+        date: new Date("2025-01-02T03:00:00.000Z"),
+        location: [41.85003, -87.65005],
+        timezone: -360
+      };
+      var results = document.getElementById("results");
+      var summary = document.getElementById("summary");
+      var checks = document.getElementById("checks");
+      var rerun = document.getElementById("rerun");
+
+      function record(label, passed, detail) {
+        var item = document.createElement("li");
+        item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+        item.dataset.pass = String(passed);
+        checks.appendChild(item);
+        return passed;
+      }
+
+      function waitForData(timeoutMs) {
+        var started = Date.now();
+        return new Promise(function (resolve, reject) {
+          function inspect() {
+            var stars = Celestial.container ? Celestial.container.selectAll(".star").size() : 0;
+            var lines = Celestial.container ? Celestial.container.selectAll(".constline").size() : 0;
+            var names = Celestial.container ? Celestial.container.selectAll(".constname").size() : 0;
+            if (stars > 100 && lines > 20 && names > 20) return resolve({ stars: stars, lines: lines, names: names });
+            if (Date.now() - started > timeoutMs) return reject(new Error("Astronomy data did not finish loading."));
+            setTimeout(inspect, 50);
+          }
+          inspect();
+        });
+      }
+
+      function nextPaint() {
+        return new Promise(function (resolve) {
+          setTimeout(resolve, 100);
+        });
+      }
+
+      function snapshot(source) {
+        var copy = document.createElement("canvas");
+        copy.width = source.width;
+        copy.height = source.height;
+        copy.getContext("2d").drawImage(source, 0, 0);
+        return copy;
+      }
+
+      function normalizedProjection(canvas) {
+        var catalogPoints = [[83.82, -5.39], [88.79, 7.41], [68.98, 16.51], [101.29, -16.72], [37.95, 89.26]];
+        return catalogPoints.map(function (coordinates) {
+          var point = Celestial.mapProjection(coordinates);
+          return [point[0] / canvas.width, point[1] / canvas.height];
+        });
+      }
+
+      function maximumPointDifference(a, b) {
+        var maximum = 0;
+        for (var i = 0; i < a.length; i += 1) {
+          var dx = a[i][0] - b[i][0];
+          var dy = a[i][1] - b[i][1];
+          maximum = Math.max(maximum, Math.sqrt(dx * dx + dy * dy));
+        }
+        return maximum;
+      }
+
+      function toBlob(canvas) {
+        return new Promise(function (resolve, reject) {
+          canvas.toBlob(function (blob) {
+            if (blob) resolve(blob);
+            else reject(new Error("Canvas returned no PNG blob."));
+          }, "image/png");
+        });
+      }
+
+      async function runProof() {
+        checks.replaceChildren();
+        rerun.hidden = true;
+        results.dataset.status = "RUNNING";
+        summary.textContent = "Running renderer checks…";
+
+        try {
+          var loaded = await waitForData(8000);
+          Celestial.skyview(TEST_SKY);
+          await nextPaint();
+
+          var liveCanvas = document.querySelector("#sky-map canvas");
+          var preview = snapshot(liveCanvas);
+          var previewSky = Celestial.skyview();
+          var previewPoints = normalizedProjection(preview);
+          var passed = true;
+
+          passed = record("catalog data loaded", loaded.stars > 100 && loaded.lines > 20 && loaded.names > 20,
+            loaded.stars + " stars, " + loaded.lines + " line groups, " + loaded.names + " names") && passed;
+          passed = record("Chicago observer state retained",
+            Math.abs(previewSky.location[0] - TEST_SKY.location[0]) < 0.0001 && Math.abs(previewSky.location[1] - TEST_SKY.location[1]) < 0.0001,
+            previewSky.location.join(", ")) && passed;
+          passed = record("preview Canvas is square and nonempty",
+            preview.width === preview.height && preview.toDataURL().length > 10000,
+            preview.width + " × " + preview.height) && passed;
+
+          Celestial.resize({ width: EXPORT_MAP_SIZE });
+          Celestial.skyview(TEST_SKY);
+          await nextPaint();
+          var large = snapshot(document.querySelector("#sky-map canvas"));
+          var largeSky = Celestial.skyview();
+          var pointDifference = maximumPointDifference(previewPoints, normalizedProjection(large));
+          var png = await toBlob(large);
+
+          passed = record("export-map Canvas resized without changing sky state",
+            large.width === large.height && largeSky.date.getTime() === previewSky.date.getTime() && largeSky.location.join() === previewSky.location.join(),
+            large.width + " × " + large.height) && passed;
+          passed = record("normalized astronomy geometry matches at both sizes",
+            pointDifference < 0.002,
+            "maximum normalized point shift " + pointDifference.toFixed(5) + " (limit 0.002)") && passed;
+          passed = record("large Canvas encodes as PNG",
+            png.type === "image/png" && png.size > 10000,
+            png.size.toLocaleString() + " bytes") && passed;
+
+          Celestial.resize({ width: PREVIEW_SIZE });
+          Celestial.skyview(TEST_SKY);
+          await nextPaint();
+
+          results.dataset.status = passed ? "PASS" : "FAIL";
+          summary.textContent = passed ? "PASS — preview/export renderer proof completed." : "FAIL — review the checks below.";
+        } catch (error) {
+          results.dataset.status = "FAIL";
+          summary.textContent = "FAIL — " + error.message;
+        }
+        rerun.hidden = false;
+      }
+
+      rerun.addEventListener("click", runProof);
+
+      Celestial.display({
+        container: "sky-map",
+        width: PREVIEW_SIZE,
+        projection: "stereographic",
+        projectionRatio: 1,
+        transform: "equatorial",
+        follow: "zenith",
+        geopos: TEST_SKY.location,
+        location: true,
+        interactive: false,
+        controls: false,
+        form: false,
+        disableAnimations: true,
+        datapath: "../vendor/d3-celestial/data/",
+        stars: { show: true, limit: 6, colors: false, style: { fill: "#fff8ec", opacity: 1 }, size: 5, exponent: -0.28, data: "stars.6.json" },
+        dsos: { show: false, data: "dsos.bright.json" },
+        constellations: {
+          names: true,
+          namesType: "iau",
+          nameStyle: { fill: "#d8b4ff", align: "center", baseline: "middle", font: ["14px sans-serif", "12px sans-serif", "10px sans-serif"] },
+          lines: true,
+          lineStyle: { stroke: "#9f7aea", width: 1.2, opacity: 0.75 },
+          bounds: false
+        },
+        mw: { show: false },
+        lines: {
+          graticule: { show: false, lon: { pos: [] }, lat: { pos: [] } },
+          equatorial: { show: false },
+          ecliptic: { show: false },
+          galactic: { show: false },
+          supergalactic: { show: false }
+        },
+        planets: { show: false },
+        background: { fill: "#080615", opacity: 1, stroke: "#5e4a82", width: 2 },
+        horizon: { show: true, stroke: "#9f7aea", width: 1, fill: "#080615", opacity: 1 },
+        daylight: { show: false },
+        formFields: { location: false, general: false, stars: false, dsos: false, constellations: false, lines: false, other: false, download: false }
+      });
+
+      setTimeout(runProof, 100);
+    }());
+  </script>
+</body>
+</html>
