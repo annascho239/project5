@@ -464,6 +464,15 @@ function skyStyle(wallpaperWidth, palette) {
   };
 }
 
+// d3-celestial converts the date through a hidden form that uses the browser's own time zone, so
+// the `timezone` it expects is the browser's current UTC offset in minutes, not the place's. The
+// date we pass is already an exact instant, so with this value the library adds no further shift.
+// (Passing the place's offset drew the sky for the wrong time whenever the two zones differed;
+// verified against an independent sidereal-time calculation in tests/sky-engine.html.)
+function celestialTimezoneArgument() {
+  return -new Date().getTimezoneOffset();
+}
+
 // Draws the resolved sky for a wallpaper of this size and returns its canvas.
 // The astronomy inputs are identical at every size; only the pixel scale changes.
 // A cached snapshot is returned for previews. With useCache false the live d3-celestial
@@ -481,7 +490,7 @@ async function renderMap(width, height, { useCache = true } = {}) {
   Celestial.skyview({
     date: instant,
     location: [place.latitude, place.longitude],
-    timezone: zonedDateTime(instant.getTime(), place.timezone).offset,
+    timezone: celestialTimezoneArgument(),
   });
   await wait(MAP_RENDER_SETTLE_MS);
 

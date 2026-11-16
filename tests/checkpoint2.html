@@ -139,8 +139,28 @@
         record("same local input in Sydney produces a different map",
           ready() && canvasData() !== chicagoSky && /Australia\/Sydney/.test(summaryText()), summaryText().slice(0, 120));
 
+        // The sky the app draws must be the TRUE sky for the place and moment, in any browser time zone.
+        // (An earlier version passed d3-celestial the place's UTC offset and drew the wrong time of night
+        // whenever it differed from the browser's; "different place, different map" did not catch that.)
+        var engine = await import("../sky-engine.js");
+        function skyError() {
+          var s = win.eval("({lat: state.place.latitude, lon: state.place.longitude, t: state.instant.getTime()})");
+          var zenith = win.Celestial.zenith();
+          var wantedRa = (engine.greenwichSiderealDegrees(new Date(s.t)) + s.lon + 720) % 360;
+          var raError = Math.abs(((zenith[0] + 360) % 360) - wantedRa); if (raError > 180) raError = 360 - raError;
+          return Math.max(raError, Math.abs(zenith[1] - s.lat));
+        }
+        var sydneyError = skyError();
+        record("the sky drawn for Sydney is the true sky for that moment (zenith matches an independent calculation)",
+          sydneyError < 0.02, "error " + sydneyError.toFixed(4) + "° in browser zone " + Intl.DateTimeFormat().resolvedOptions().timeZone);
+
         // DST gap and ambiguity in Chicago
         await choosePlace("Chicago", "Illinois");
+        setWhen("2025-07-04", "21:00");
+        await sleep(500);
+        var summerError = skyError();
+        record("a daylight-saving date draws the true sky too (Chicago, July 4, 9 PM CDT)",
+          summerError < 0.02, "error " + summerError.toFixed(4) + "°");
         setWhen("2025-03-09", "02:30");
         await sleep(200);
         record("DST gap is rejected with a readable error and no sky",
