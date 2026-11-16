@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage B checkpoint 2 playability and level pool checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+    pre { white-space: pre-wrap; color: #bbb; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <pre id="report"></pre>
+
+  <script type="module">
+    import { BOARD, buildLevel, loadCatalog } from "../game-levels.js";
+    import { PHYSICS, createGame, playShot } from "../game-physics.js";
+    import { PLAYABLE, assessAll, assessConstellation, buildPlayableLevel, difficultyFor, quickAssess, bumperCountFor } from "../game-pool.js";
+    import { visibleConstellations } from "../sky-engine.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const deg = (d) => (d * Math.PI) / 180;
+    const report = [];
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const started = performance.now();
+      const all = assessAll(catalog);
+      const elapsed = Math.round(performance.now() - started);
+      const byId = Object.fromEntries(all.map((a) => [a.id, a]));
+      const playable = all.filter((a) => a.playable);
+      const countKind = (kind) => all.filter((a) => a.kind === kind).length;
+
+      record("every constellation in the catalog is assessed, each with a verdict, a kind, and a reason when not playable",
+        all.length === 88 && all.every((a) => typeof a.playable === "boolean" && a.kind && (a.playable ? a.reason === "" : /\.$/.test(a.reason) && a.reason.length > 10)),
+        `${all.length} assessed in ${elapsed} ms`);
+      record("the playable pool is the expected size and the reasons add up",
+        playable.length === 48 && countKind("playable") === 48,
+        `${playable.length} playable; too many stars ${countKind("too-many")}, crowded ${countKind("crowded")}, too few ${countKind("too-few")}, unreachable ${countKind("unreachable")}, no room ${countKind("no-room")}`);
+      report.push("kinds: " + JSON.stringify(Object.fromEntries(["playable", "too-many", "crowded", "too-few", "unreachable", "no-room"].map((k) => [k, countKind(k)]))));
+
+      // Independent re-derivation of the rule, using a finer search than the module's.
+      let ruleMismatches = [];
+      for (const a of all) {
+        const polylines = catalog.lines.get(a.id);
+        const stars = new Set(polylines.flat().map((p) => p.join(",")));
+        let expected = stars.size >= PLAYABLE.minStars && stars.size <= PLAYABLE.maxStars;
+        if (expected) {
+          const level = buildLevel({ id: a.id, bumpers: bumperCountFor(stars.size) }, catalog);
+          let closest = Infinity;
+          for (let i = 0; i < level.stars.length; i += 1) for (let j = i + 1; j < level.stars.length; j += 1) closest = Math.min(closest, Math.hypot(level.stars[i].x - level.stars[j].x, level.stars[i].y - level.stars[j].y));
+          expected = closest >= 2 * BOARD.starRadius + 4;
+          if (expected) {
+            const reached = new Array(level.stars.length).fill(false);
+            for (let d = -70; d <= 70.0001; d += 0.25) { const g = createGame(level); playShot(g, deg(d)); g.lit.forEach((x, i) => { if (x) reached[i] = true; }); }
+            expected = reached.every(Boolean);
+          }
+        }
+        if (expected !== a.playable) ruleMismatches.push(a.id);
+      }
+      record("the verdict matches an independent re-derivation of the rule (finer aim search) for all 88", ruleMismatches.length === 0, ruleMismatches.join(", ") || "no mismatches");
+
+      const quick = assessAll(catalog, { full: false });
+      const quickMismatch = quick.filter((q) => q.playable !== byId[q.id].playable || q.kind !== byId[q.id].kind);
+      record("the cheap check (star count and spacing) gives the same verdict as the full check for all 88, so lists can use it",
+        quickMismatch.length === 0, quickMismatch.map((q) => q.id).join(", ") || "identical");
+
+      // Well-known constellations
+      const name = (id) => catalog.info.get(id).en.replace(/\s/g, " ");
+      const famousPlayable = ["Cas", "UMi", "Cyg", "Lyr", "CrB", "Cru", "Del"];
+      const famousNot = { Ori: "too-many", UMa: "too-many", Sco: "too-many", Sgr: "too-many", Peg: "too-many", Tau: "crowded", Gem: "crowded", Leo: "crowded" };
+      record("well-known constellations behave as expected: " + famousPlayable.map(name).join(", ") + " are playable",
+        famousPlayable.every((id) => byId[id].playable), famousPlayable.map((id) => `${id} ${byId[id].playable ? "✓" : "✗"}`).join(" "));
+      record("Orion, the Great Bear, the Scorpion, the Archer, and Pegasus are learn-only for having too many stars, and the Bull, the Twins, and the Lion for crowded stars",
+        Object.entries(famousNot).every(([id, kind]) => !byId[id].playable && byId[id].kind === kind),
+        Object.entries(famousNot).map(([id]) => `${name(id)}: ${byId[id].reason}`).join(" | "));
+
+      // Every playable level is a sound level
+      let problems = [];
+      const physicsFailures = [];
+      for (const a of playable) {
+        const level = buildPlayableLevel(a.id, catalog);
+        const again = buildPlayableLevel(a.id, catalog);
+        if (JSON.stringify(level) !== JSON.stringify(again)) problems.push(`${a.id} not deterministic`);
+        const { region, bumperZone, wallClearance, bumperRadius, width } = BOARD;
+        if (!level.stars.every((s) => s.x >= region.left - 0.01 && s.x <= region.right + 0.01 && s.y >= region.top - 0.01 && s.y <= region.bottom + 0.01)) problems.push(`${a.id} star outside region`);
+        const degree = new Array(level.stars.length).fill(0);
+        const linkKeys = new Set(level.links.map(([x, y]) => `${x}-${y}`));
+        level.links.forEach(([x, y]) => { degree[x] += 1; degree[y] += 1; });
+        if (linkKeys.size !== level.links.length || degree.some((d) => d === 0)) problems.push(`${a.id} links`);
+        if (level.bumpers.length !== bumperCountFor(level.stars.length)) problems.push(`${a.id} bumper count`);
+        for (const b of level.bumpers) {
+          if (b.x - bumperRadius < wallClearance || b.x + bumperRadius > width - wallClearance || b.y < bumperZone.top || b.y > bumperZone.bottom) problems.push(`${a.id} bumper placement`);
+          if (level.stars.some((s) => Math.hypot(s.x - b.x, s.y - b.y) < BOARD.bumperToStarClearance)) problems.push(`${a.id} bumper near star`);
+        }
+        if (![level.title, ...Object.values(level.facts).filter((v) => typeof v === "string")].every((s) => /^\S+( \S+)*$/.test(s))) problems.push(`${a.id} odd spacing in names`);
+        for (let d = -70; d <= 70; d += 5) {
+          const g = createGame(level);
+          const launched = playShot(g, deg(d), { recordPath: true });
+          for (const [x, y] of launched.path) {
+            if (x < BOARD.ballRadius - 1e-6 || x > BOARD.width - BOARD.ballRadius + 1e-6 || y < BOARD.ballRadius - 1e-6) physicsFailures.push(`${a.id}@${d}: left the board`);
+            if (level.bumpers.some((b) => BOARD.ballRadius + BOARD.bumperRadius - Math.hypot(x - b.x, y - b.y) > 0.25) || level.stars.some((s) => BOARD.ballRadius + BOARD.starRadius - Math.hypot(x - s.x, y - s.y) > 0.25)) physicsFailures.push(`${a.id}@${d}: overlap`);
+          }
+        }
+      }
+      record("all 48 playable levels build the same way every time, with sound stars, links, bumpers, and names", problems.length === 0, problems.slice(0, 5).join("; ") || "no problems");
+      record("on all 48 playable levels, 29 aims each never leave the board or overlap a peg", physicsFailures.length === 0, physicsFailures.slice(0, 3).join("; ") || "no failures");
+
+      // Difficulty and expert launches
+      const tiers = { Easy: 0, Medium: 0, Hard: 0 };
+      playable.forEach((a) => { tiers[a.difficulty] += 1; });
+      record("difficulty follows star count (Easy up to 5, Medium 6 to 8, Hard 9 to 12) and every tier is used",
+        playable.every((a) => a.difficulty === difficultyFor(a.starCount)) && difficultyFor(5) === "Easy" && difficultyFor(6) === "Medium" && difficultyFor(8) === "Medium" && difficultyFor(9) === "Hard" && Object.values(tiers).every((n) => n > 0),
+        JSON.stringify(tiers));
+      const launchCounts = {};
+      playable.forEach((a) => { launchCounts[a.expertLaunches] = (launchCounts[a.expertLaunches] || 0) + 1; });
+      record("each playable level can be cleared, with an expert launch estimate of 1 to 4",
+        playable.every((a) => a.expertLaunches >= 1 && a.expertLaunches <= 4 && a.bestSingleShot >= 1 && a.bestSingleShot <= a.starCount), "expert launches: " + JSON.stringify(launchCounts));
+      report.push("difficulty tiers: " + JSON.stringify(tiers) + "; expert launches: " + JSON.stringify(launchCounts));
+      const oneShot = playable.filter((a) => a.expertLaunches === 1).map((a) => name(a.id));
+      report.push("cleared by one perfect shot (will need tuning or par): " + oneShot.join(", "));
+
+      let refused = false;
+      try { buildPlayableLevel("Ori", catalog); } catch (e) { refused = /not playable/.test(e.message) && /Too many stars/.test(e.message); }
+      let unknown = false;
+      try { quickAssess("Nope", catalog); } catch { unknown = true; }
+      record("building a level for an unplayable constellation is refused with the reason, and an unknown id is rejected", refused && unknown);
+
+      // How the pool looks from real skies
+      function bucket(sky) {
+        const full = sky.filter((s) => s.status === "full");
+        const partial = sky.filter((s) => s.status === "partial");
+        return {
+          play: full.filter((s) => byId[s.id].playable).length,
+          learnFull: full.filter((s) => !byId[s.id].playable).length,
+          partial: partial.length,
+        };
+      }
+      const skies = [
+        ["Chicago, Jan 1 9 PM", { latitude: 41.85, longitude: -87.65 }, new Date("2025-01-02T03:00:00Z")],
+        ["Chicago, Jul 1 10 PM", { latitude: 41.85, longitude: -87.65 }, new Date("2025-07-02T03:00:00Z")],
+        ["Sydney, Jan 1 9 PM", { latitude: -33.87, longitude: 151.21 }, new Date("2025-01-01T10:00:00Z")],
+        ["Quito, Jan 1 9 PM", { latitude: -0.18, longitude: -78.47 }, new Date("2025-01-02T02:00:00Z")],
+      ];
+      let allBucketed = true;
+      for (const [label, observer, when] of skies) {
+        const sky = visibleConstellations(catalog.lines, observer, when);
+        const b = bucket(sky);
+        report.push(`${label}: ${b.play} playable in full view, ${b.learnFull} learn-only in full view, ${b.partial} partly above the horizon`);
+        allBucketed = allBucketed && b.play + b.learnFull + b.partial === sky.filter((s) => s.status !== "none").length;
+      }
+      record("every constellation in view lands in exactly one of: playable, learn-only in full view, partly in view", allBucketed);
+
+      // Could the explore list ever come up empty or nearly empty?
+      let minListed = Infinity, minPlay = Infinity, maxPlay = 0, emptyPlay = 0, samples = 0, atWorst = "";
+      const playCounts = [];
+      for (let lat = -85; lat <= 85; lat += 10) {
+        for (let month = 0; month < 12; month += 1) {
+          for (const hour of [22, 3]) {
+            const when = new Date(Date.UTC(2025, month, 15, hour, 0));
+            const sky = visibleConstellations(catalog.lines, { latitude: lat, longitude: 0 }, when);
+            const listed = sky.filter((s) => s.status !== "none").length;
+            const b = bucket(sky);
+            samples += 1;
+            playCounts.push(b.play);
+            minListed = Math.min(minListed, listed);
+            if (b.play < minPlay) { minPlay = b.play; atWorst = `latitude ${lat}°, ${when.toISOString().slice(0, 13)}h UTC`; }
+            maxPlay = Math.max(maxPlay, b.play);
+            if (b.play === 0) emptyPlay += 1;
+          }
+        }
+      }
+      playCounts.sort((x, y) => x - y);
+      report.push(`across ${samples} sampled places and times: playable-in-full-view min ${minPlay} (at ${atWorst}), median ${playCounts[Math.floor(samples / 2)]}, max ${maxPlay}; skies with nothing playable: ${emptyPlay}; fewest constellations listed at all: ${minListed}`);
+      record("the explore list is never empty: every sampled sky lists at least 5 constellations",
+        minListed >= 5, `fewest listed ${minListed} across ${samples} skies`);
+      record("how often is nothing playable? (informational: the screen must handle a sky with no playable constellation)", true,
+        `${emptyPlay} of ${samples} sampled skies; fewest playable otherwise ${minPlay}`);
+
+      document.getElementById("report").textContent = report.join("\n");
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — stage B checkpoint 2 playability and level pool checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>
