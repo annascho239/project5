@@ -25,6 +25,20 @@ Acceptance checks (to be tested as built):
 
 This changes the pitch's wallpaper-maker framing; see `plan.md` for the approval boundary.
 
+## Phase 3 stage B: Explore constellations (planned; not yet built)
+
+After the memory form resolves a place and moment, the **Explore constellations** action lists the constellations above the horizon at that moment. Each card says whether it is fully in view or partly above the horizon, and offers **Play** (only when playable) and **Learn**. Completed constellations are drawn brighter on the downloadable wallpaper.
+
+Acceptance checks (to be tested as built):
+
+1. A constellation is listed when at least one of its stars is above the horizon; it is *fully in view* only when all are. Chicago at 9:00 PM on January 1, 2025 lists Orion and Cassiopeia and never lists Crux; Sydney at the same local time lists Crux and never Cassiopeia.
+2. The altitude and compass direction computed for a star agree with d3-celestial's own sky, which draws the wallpaper, so the list and the wallpaper never disagree. (Verified in `tests/sky-engine.html` for seven place-and-time cases and four browser time zones.) The sky library must be given the browser's current UTC offset as its `timezone`, never the place's; otherwise it draws the wrong time of night.
+3. A constellation is playable only if it has 12 stars or fewer, its stars are at least 32 board units apart, and some aim reaches every star. Unplayable constellations are still listed, with Learn only and a stated reason.
+4. Learn facts come only from the vendored catalog or are computed from it for the chosen place and moment.
+5. Changing the place, date, or time changes the list, and the list is the same for the same inputs.
+6. The wallpaper highlights exactly the constellations the player completed in that session.
+7. No memory text appears in a URL, storage, or any request; only the place search text leaves the browser.
+
 ## Current behavior and acceptance checks
 
 ### Memory and place

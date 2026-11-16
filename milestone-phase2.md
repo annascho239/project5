@@ -42,6 +42,10 @@ Performed by the Developer on their iPhone 15 Pro in Safari, using the public Gi
 
 Not recorded: the iOS version, specific coverage by the Lock Screen clock, widgets, and controls, and the Developer's verdict on text size and the provisional safe margins. These are observations from the Developer's own report; the Agent did not run the device test.
 
+## Correction after the milestone (November 16, 2026)
+
+An independent cross-check found that the Phase 2 wallpaper maker drew the wrong sky whenever the memory's time zone differed from the viewer's. The app gave the sky library the place's time-zone offset, but the library uses the browser's own offset, so the sky was rotated by the difference. A Sydney memory viewed from a Chicago browser was off by 104 degrees (about seven hours of sky rotation); a Chicago memory in summer viewed in winter was off by 15 degrees. The earlier tests confirmed that different places gave different maps but not that each map was correct. The Developer's iPhone test therefore confirmed the flow, the export, and the Lock Screen result, but not the astronomical accuracy of every wallpaper. The cause is fixed in the code and verified against an independent sidereal-time calculation across five browser time zones and eight place-and-date cases; the fix is not yet published. The statements above about place and time changing the astronomy remain true; the accuracy statement now holds only after this fix.
+
 ## Limitations and open risks
 
 - The map is an astronomical interpretation, not a photograph. It does not show weather, terrain, buildings, light pollution, or exact naked-eye visibility.
