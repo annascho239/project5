@@ -38,7 +38,7 @@ Tested in headless Chrome on a desktop (details in `plan.md`):
 
 ## iPhone results
 
-Performed by the Developer on their iPhone 15 Pro in Safari, using the public GitHub Pages build (`https://annascho239.github.io/project5/`). The Developer reported that they completed a real memory, exported in both Calm and Energized, exported five times in one session with no problems, saved a PNG to Photos, and set it as the Lock Screen, and that the result looks good.
+Performed by the Developer on their iPhone 15 Pro in Safari, using the public GitHub Pages build (`https://annascho239.github.io/project5/`, which at the time of the test opened the wallpaper maker; the wallpaper maker is now at `/wallpaper.html` and the root is a landing page). The Developer reported that they completed a real memory, exported in both Calm and Energized, exported five times in one session with no problems, saved a PNG to Photos, and set it as the Lock Screen, and that the result looks good.
 
 Not recorded: the iOS version, specific coverage by the Lock Screen clock, widgets, and controls, and the Developer's verdict on text size and the provisional safe margins. These are observations from the Developer's own report; the Agent did not run the device test.
 

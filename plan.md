@@ -42,6 +42,7 @@ Decisions from the planning dialogue:
    - **The tests can fail:** a deliberately broken "new best" rule in a scratch copy failed the two checks it should.
    - **Test-method fixes:** my runners reused a browser profile and served a stale cached copy of a test page; both runners now disable the cache. A size check counted hidden win-panel buttons as 0px tall; it now measures only visible controls. A value-wrapping layout flaw in the facts list was fixed.
    - **Check counts corrected.** Some totals quoted earlier were hand-counted and wrong by one or two. Re-taken from the page on Nov 16 after checkpoint 4: levels 39, physics 26, checkpoint 2 form 16, checkpoint 3 export 19, play screen 21, win and progression 22, all passing. Earlier figures in this file describe earlier versions of those suites.
+   - **Front page (Nov 16, 2026):** `index.html` is now a landing page with two cards (Star Launcher at `play.html`, Memory Sky Wallpaper at `wallpaper.html`), plus a privacy note and credits link; the wallpaper maker was moved with `git mv index.html wallpaper.html`, its logo links home, and the game has a back link. `tests/home.html` (13 checks) passed: links, relative paths for GitHub Pages, 48px touch targets, no overflow at 390px, side-by-side cards on wide screens, no external requests, and both destinations link back. All seven suites passed afterward (home 13, levels 39, physics 26, checkpoint 2 form 16, checkpoint 3 export 19, play 21, win 22). `tests/checkpoint1.html` still points at the removed `index.html`; it belongs to the superseded star form and is left for cleanup.
    - **Not done:** the Developer's play-test of feel (aim, speed, hit size, bounce limit); the front page still opens the wallpaper maker and does not link to the game.
 5. **Desktop verification.** Collision and scoring tests, keyboard flow, screenshots.
 6. **Developer iPhone 15 Pro test.** The Agent prepares it; only the Developer's observations can pass it.
@@ -102,7 +103,7 @@ The Agent can prepare this test but cannot mark it passed without the Developer'
 
 **Checkpoint 5 record (the Developer's observations, reported in chat on Nov 9, 2026; the Agent recorded them without adding detail).**
 
-Build under test: commit `76292ee` (full-bleed sky) on GitHub Pages, `https://annascho239.github.io/project5/`. Device: iPhone 15 Pro, Safari, iOS version: not recorded.
+Build under test: commit `76292ee` (full-bleed sky) on GitHub Pages, `https://annascho239.github.io/project5/` (at that time the root page was the wallpaper maker; since Nov 16, 2026 it is a landing page and the wallpaper maker is at `/wallpaper.html`). Device: iPhone 15 Pro, Safari, iOS version: not recorded.
 
 | Step | What to do | Observed result |
 |---|---|---|

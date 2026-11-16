@@ -107,7 +107,7 @@ One state object owns `memoryTitle`, `placeQuery`, selected `place`, `localDate`
 
 Responsibilities:
 
-- `index.html`: semantic form, privacy disclosure, search results, Canvas fallback, summary, status, credits, and export action.
+- `wallpaper.html` (was `index.html` until Nov 16, 2026): semantic form, privacy disclosure, search results, Canvas fallback, summary, status, credits, and export action. `index.html` is now a landing page that links to the game and to this page.
 - `styles.css`: layout, safe composition, focus/error states, and visual system.
 - `app.js`: state, validation, explicit network request, result selection, time conversion, astronomy configuration, preview/export orchestration, and cleanup.
 - Local vendor/data files: pinned d3-celestial, D3 v3, Luxon, magnitude-6 stars, constellation lines/names, licenses, and credits. No runtime CDN dependency.
