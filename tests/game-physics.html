@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game checkpoint 2 physics checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+
+  <script type="module">
+    import { BOARD, buildAllLevels, loadCatalog } from "../game-levels.js";
+    import { PHYSICS, createGame, launch, step, playShot, progress, clampAim, aimToward } from "../game-physics.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const level = (stars = [], bumpers = []) => ({ id: "test", title: "Test", stars, links: [], bumpers, facts: {} });
+    const deg = (d) => (d * Math.PI) / 180;
+    const R = BOARD.ballRadius;
+    // Sequential resolution between two close stars can leave a sub-pixel overlap; anything deeper is a failure.
+    const OVERLAP_TOLERANCE = 0.25;
+
+    // Runs a shot one step at a time and checks invariants along the way.
+    function watch(game, angle) {
+      launch(game, angle);
+      const log = { steps: 0, maxXDrift: 0, maxPenetration: 0, minSpeed: Infinity, maxSpeed: 0, outsideWalls: 0, overlaps: 0, vxFlips: 0, vyFlips: 0, reason: null, events: [] };
+      let lastVx = game.ball.vx, lastVy = game.ball.vy;
+      while (game.ball) {
+        const events = step(game);
+        events.forEach((e) => { log.events.push(e); if (e.type === "end") log.reason = e.reason; });
+        log.steps += 1;
+        const b = game.ball;
+        if (!b) break;
+        log.maxXDrift = Math.max(log.maxXDrift, Math.abs(b.x - BOARD.launcher.x));
+        const speed = Math.hypot(b.vx, b.vy);
+        log.minSpeed = Math.min(log.minSpeed, speed);
+        log.maxSpeed = Math.max(log.maxSpeed, speed);
+        if (b.x < R - 1e-6 || b.x > BOARD.width - R + 1e-6 || b.y < R - 1e-6) log.outsideWalls += 1;
+        for (const bump of game.level.bumpers) {
+          const depth = R + BOARD.bumperRadius - Math.hypot(b.x - bump.x, b.y - bump.y);
+          if (depth > OVERLAP_TOLERANCE) log.overlaps += 1;
+          log.maxPenetration = Math.max(log.maxPenetration, depth);
+        }
+        for (const star of game.level.stars) {
+          const depth = R + BOARD.starRadius - Math.hypot(b.x - star.x, b.y - star.y);
+          if (depth > OVERLAP_TOLERANCE) log.overlaps += 1;
+          log.maxPenetration = Math.max(log.maxPenetration, depth);
+        }
+        if (Math.sign(b.vx) !== Math.sign(lastVx) && lastVx !== 0) log.vxFlips += 1;
+        if (Math.sign(b.vy) !== Math.sign(lastVy)) log.vyFlips += 1;
+        lastVx = b.vx; lastVy = b.vy;
+      }
+      return log;
+    }
+
+    try {
+      // --- Unit rules on hand-made levels ---
+      let game = createGame(level());
+      let log = watch(game, 0);
+      record("an unobstructed straight shot bounces off the top and exits the bottom",
+        log.reason === "bottom" && log.vyFlips >= 1 && game.launches === 1 && !game.won, `${log.steps} steps, reason ${log.reason}`);
+      record("speed stays constant through bounces",
+        Math.abs(log.maxSpeed - PHYSICS.speed) < 1e-6 && Math.abs(log.minSpeed - PHYSICS.speed) < 1e-6,
+        `speed ${log.minSpeed.toFixed(6)}–${log.maxSpeed.toFixed(6)} (set ${PHYSICS.speed})`);
+
+      game = createGame(level());
+      log = watch(game, deg(45));
+      record("an angled shot reflects off the side walls and never leaves the board",
+        log.vxFlips >= 1 && log.outsideWalls === 0 && log.reason === "bottom", `${log.vxFlips} wall reflections`);
+
+      game = createGame(level([], [{ x: 180, y: 400 }]));
+      log = watch(game, 0);
+      record("a bumper reflects a head-on ball straight back without overlap",
+        log.overlaps === 0 && log.vyFlips === 1 && log.maxXDrift < 1e-6 && log.events.some((e) => e.kind === "bumper"),
+        `${log.vyFlips} vertical reversal, sideways drift ${log.maxXDrift.toExponential(1)}`);
+
+      game = createGame(level([{ x: 180, y: 300 }]));
+      log = watch(game, 0);
+      const lights = log.events.filter((e) => e.type === "light");
+      record("a star is lit once on first touch and the lit state persists",
+        lights.length === 1 && lights[0].index === 0 && game.lit[0] === true && log.events.filter((e) => e.kind === "star").length >= 1);
+
+      game = createGame(level([{ x: 180, y: 300 }]));
+      const winResult = playShot(game, 0);
+      record("lighting every star wins the level and ends the launch",
+        game.won && winResult.reason === "won" && game.ball === null && game.launches === 1, `reason ${winResult.reason}`);
+      record("no further launches are accepted after winning", launch(game, 0) === false && game.launches === 1);
+
+      game = createGame(level([{ x: 40, y: 200 }, { x: 320, y: 200 }]));
+      playShot(game, 0);
+      const missedLaunches = game.launches;
+      launch(game, deg(-5));
+      const refused = launch(game, deg(5));
+      record("a launch is refused while a ball is in flight",
+        refused === false && game.launches === missedLaunches + 1 && progress(game).inFlight === true);
+      while (game.ball) step(game);
+
+      game = createGame(level([{ x: 40, y: 200 }, { x: 320, y: 200 }]));
+      playShot(game, 0);
+      playShot(game, deg(10));
+      record("each accepted launch counts exactly once, hit or miss", game.launches === 2 && !game.won);
+
+      game = createGame(level(), { maxSteps: 50 });
+      log = watch(game, 0);
+      record("a launch that lasts too long ends in a timeout", log.reason === "timeout" && log.steps === 50, `${log.steps} steps`);
+
+      game = createGame(level(), { maxBounces: 2 });
+      log = watch(game, deg(30));
+      record("a launch is spent after its bounce limit",
+        log.reason === "spent" && log.events.filter((e) => e.type === "bounce").length === 3, `${log.events.filter((e) => e.type === "bounce").length} bounces, reason ${log.reason}`);
+      record("the default bounce limit is 8", PHYSICS.maxBounces === 8 && createGame(level()).maxBounces === 8);
+
+      record("aim is clamped so the ball always starts upward",
+        clampAim(deg(120)) === deg(70) && clampAim(deg(-120)) === deg(-70) && clampAim(0) === 0);
+      record("aiming toward a point gives a sensible angle",
+        Math.abs(aimToward(BOARD.launcher.x, 100)) < 1e-9 && aimToward(300, 300) > 0 && aimToward(60, 300) < 0 && aimToward(180, 700) <= deg(70));
+
+      // --- Determinism ---
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const levels = buildAllLevels(catalog);
+      const a = playShot(createGame(levels[2]), deg(13.7), { recordPath: true });
+      const b = playShot(createGame(levels[2]), deg(13.7), { recordPath: true });
+      const c = playShot(createGame(levels[2]), deg(-22.2), { recordPath: true });
+      record("the same level and aim give an identical path and events",
+        JSON.stringify(a) === JSON.stringify(b) && a.path.length > 50 && JSON.stringify(a.path) !== JSON.stringify(c.path), `${a.path.length} path points`);
+
+      const instant = createGame(levels[0]);
+      const stepped = createGame(levels[0]);
+      playShot(instant, deg(8));
+      launch(stepped, deg(8));
+      while (stepped.ball) step(stepped);
+      record("instant-result play matches stepping the same shot by hand",
+        JSON.stringify(instant.lit) === JSON.stringify(stepped.lit) && instant.launches === stepped.launches);
+
+      // --- Real levels: invariants across many aims, then solvability ---
+      const ANGLE_STEP = 0.25;
+      for (const lv of levels) {
+        const tag = `${lv.title}: `;
+        let worst = { overlaps: 0, outside: 0, speedError: 0, runaway: 0, depth: 0 };
+        for (let d = -PHYSICS.maxAimDegrees; d <= PHYSICS.maxAimDegrees; d += 5) {
+          const g = createGame(lv);
+          const l = watch(g, deg(d));
+          worst.overlaps += l.overlaps;
+          worst.depth = Math.max(worst.depth, l.maxPenetration);
+          worst.outside += l.outsideWalls;
+          worst.speedError = Math.max(worst.speedError, Math.abs(l.maxSpeed - PHYSICS.speed), Math.abs(l.minSpeed - PHYSICS.speed));
+          if (l.reason === null) worst.runaway += 1;
+        }
+        record(tag + "29 shots across the aim range never overlap a peg, leave the board, or change speed",
+          worst.overlaps === 0 && worst.outside === 0 && worst.speedError < 1e-6 && worst.runaway === 0,
+          `overlaps ${worst.overlaps}, deepest ${worst.depth.toFixed(3)} units, outside ${worst.outside}, speed error ${worst.speedError.toExponential(1)}`);
+
+        // Which stars can each aim light from a fresh start? Lit state never changes the physics,
+        // so this is a set-cover question.
+        const sets = new Map();
+        const coverage = new Array(lv.stars.length).fill(0);
+        let timeouts = 0;
+        const started = performance.now();
+        for (let d = -PHYSICS.maxAimDegrees; d <= PHYSICS.maxAimDegrees + 1e-9; d += ANGLE_STEP) {
+          const g = createGame(lv);
+          const result = playShot(g, deg(d));
+          if (result.reason === "timeout") timeouts += 1;
+          const mask = g.lit.map((x) => (x ? 1 : 0)).join("");
+          sets.set(mask, [...(sets.get(mask) || []), d]);
+          g.lit.forEach((x, i) => { if (x) coverage[i] += 1; });
+        }
+        const elapsed = Math.round(performance.now() - started);
+        const unreachable = coverage.map((n, i) => (n === 0 ? i : -1)).filter((i) => i >= 0);
+        record(tag + "every star can be lit by some aim", unreachable.length === 0,
+          unreachable.length ? `unreachable stars ${unreachable.join(",")}` : `coverage per star: ${coverage.join(", ")} of ${Math.round((2 * PHYSICS.maxAimDegrees) / ANGLE_STEP) + 1} aims (${elapsed} ms)`);
+
+        // Greedy set cover: a launch count that is known to be enough, useful as a first par estimate.
+        const masks = [...sets.keys()].map((m) => m.split("").map(Number));
+        let remaining = new Array(lv.stars.length).fill(1);
+        let launchesNeeded = 0;
+        while (remaining.some(Boolean) && launchesNeeded < 50) {
+          let best = null, bestGain = 0;
+          for (const m of masks) {
+            const gain = m.reduce((s, v, i) => s + (v && remaining[i] ? 1 : 0), 0);
+            if (gain > bestGain) { bestGain = gain; best = m; }
+          }
+          if (!best) break;
+          remaining = remaining.map((r, i) => (r && !best[i] ? 1 : 0));
+          launchesNeeded += 1;
+        }
+        const bestSingle = Math.max(...masks.map((m) => m.reduce((s, v) => s + v, 0)));
+        record(tag + "the level can be cleared, and a launch count is known to be enough",
+          !remaining.some(Boolean), `greedy cover needs ${launchesNeeded} launches; best single shot lights ${bestSingle} of ${lv.stars.length}; ${timeouts} timeouts`);
+      }
+
+      // --- Actually playing a level to the end through the real rules ---
+      const lv1 = levels[0];
+      const game1 = createGame(lv1);
+      let guard = 0;
+      while (!game1.won && guard < 200) {
+        let bestAngle = 0, bestGain = -1;
+        for (let d = -70; d <= 70; d += 1) {
+          const trial = createGame(lv1);
+          trial.lit = [...game1.lit];
+          playShot(trial, deg(d));
+          const gain = trial.lit.filter(Boolean).length - game1.lit.filter(Boolean).length;
+          if (gain > bestGain) { bestGain = gain; bestAngle = d; }
+        }
+        if (bestGain <= 0) break;
+        playShot(game1, deg(bestAngle));
+        guard += 1;
+      }
+      record("a scripted player can clear level 1 using only the public rules",
+        game1.won && game1.launches === guard && progress(game1).lit === lv1.stars.length, `${game1.launches} launches`);
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — game checkpoint 2 physics checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

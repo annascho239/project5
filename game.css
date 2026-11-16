@@ -1,0 +1,275 @@
+:root {
+  color-scheme: dark;
+  --ink: #f8f7ff;
+  --muted: #b8bad1;
+  --faint: #898ca9;
+  --night: #07081a;
+  --panel: rgba(16, 18, 48, 0.78);
+  --border: rgba(190, 187, 255, 0.22);
+  --violet: #9c8cff;
+  --violet-bright: #c6bcff;
+  --coral: #ff8078;
+  --focus: #f8d56b;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--ink);
+}
+
+body {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 80% 0%, rgba(112, 86, 255, 0.2), transparent 24rem),
+    linear-gradient(165deg, #08091d, #070817 60%, #090b23);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+h1,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+.game {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(100%, 30rem);
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+}
+
+.hud {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  color: var(--violet-bright);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.hud-counts {
+  display: flex;
+  gap: 1rem;
+  text-align: right;
+}
+
+.hud-title {
+  min-width: 0;
+}
+
+.hud-counts dt {
+  color: var(--faint);
+  white-space: nowrap;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hud-counts dd {
+  font-size: 1.05rem;
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The board takes the height left over after the controls; the canvas keeps its 9:16 ratio. */
+.board-wrap {
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 18rem;
+  max-height: 70dvh;
+  padding-bottom: 0.25rem; /* room for the keyboard focus outline */
+}
+
+#board {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 360 / 640;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: #060719;
+  cursor: crosshair;
+  touch-action: none; /* dragging aims; it must not scroll the page */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.aim-readout {
+  margin-top: 0.3rem;
+  color: var(--violet-bright);
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.hint,
+.status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.status:not(:empty) {
+  border-left: 2px solid var(--violet);
+  padding-left: 0.7rem;
+}
+
+.status[data-tone="win"] {
+  border-color: #83e6c0;
+  color: #83e6c0;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.6rem;
+}
+
+.button {
+  min-height: 2.9rem;
+  border: 1px solid rgba(198, 188, 255, 0.28);
+  border-radius: 0.75rem;
+  color: var(--violet-bright);
+  background: rgba(156, 140, 255, 0.08);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.button-primary {
+  border: 0;
+  color: #0a0b20;
+  background: linear-gradient(120deg, var(--violet-bright), #afa2ff 55%, #ff9b91);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.levels {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.levels legend {
+  margin-bottom: 0.4rem;
+  padding: 0;
+  color: var(--faint);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.level-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.level-card {
+  position: relative;
+  display: grid;
+  gap: 0.1rem;
+  min-height: 2.9rem;
+  min-width: 0;
+  place-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.75rem;
+  padding: 0.4rem;
+  background: rgba(5, 7, 28, 0.45);
+  text-align: center;
+  cursor: pointer;
+}
+
+.level-card:has(input:checked) {
+  border-color: var(--violet-bright);
+  background: rgba(156, 140, 255, 0.14);
+}
+
+.level-card:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.level-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.level-card strong {
+  overflow: hidden;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-card small {
+  color: var(--faint);
+  font-size: 0.68rem;
+}
+
+.toggle {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 1.3rem;
+  height: 1.3rem;
+  accent-color: var(--violet);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

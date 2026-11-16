@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game checkpoint 3 play screen checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { width: 390px; height: 844px; border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" src="../play.html" title="Star Launcher under test"></iframe>
+
+  <script type="module">
+    import { BOARD, buildAllLevels, loadCatalog } from "../game-levels.js";
+    import { createGame, playShot, progress } from "../game-physics.js";
+
+    const frame = document.getElementById("app");
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const deg = (d) => (d * Math.PI) / 180;
+
+    let win, doc;
+    const $ = (selector) => doc.querySelector(selector);
+    const text = (selector) => $(selector).textContent.trim();
+    const canvas = () => $("#board");
+
+    function key(name, options = {}) {
+      canvas().dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+    }
+    function readAimDegrees() {
+      const match = /Aim: (\d+)° (left|right)|straight up/.exec(text("#aim-readout"));
+      if (!match) return NaN;
+      if (match[0] === "straight up") return 0;
+      return Number(match[1]) * (match[2] === "left" ? -1 : 1);
+    }
+    function setAimDegrees(target) {
+      let guard = 0;
+      while (readAimDegrees() !== target && guard < 200) {
+        const diff = target - readAimDegrees();
+        key(diff > 0 ? "ArrowRight" : "ArrowLeft", { shiftKey: Math.abs(diff) >= 5 });
+        guard += 1;
+      }
+    }
+    function pointer(type, boardX, boardY) {
+      const rect = canvas().getBoundingClientRect();
+      canvas().dispatchEvent(new win.PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 7, isPrimary: true, button: 0,
+        clientX: rect.left + (boardX / BOARD.width) * rect.width,
+        clientY: rect.top + (boardY / BOARD.height) * rect.height,
+      }));
+    }
+    const setInstant = (value) => { $("#instant-toggle").checked = value; };
+    const launches = () => Number(text("#launch-count"));
+    const litList = () => [...doc.querySelectorAll("#star-list li")].map((li) => (/: lit$/.test(li.textContent) ? 1 : 0)).join("");
+    async function waitFor(predicate, ms = 20000) {
+      for (let waited = 0; waited < ms; waited += 50) { if (predicate()) return true; await sleep(50); }
+      return false;
+    }
+    function distinctColors() {
+      const c = canvas();
+      const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      const seen = new Set();
+      for (let i = 0; i < data.length; i += 4 * 97) seen.add(data[i] + "," + data[i + 1] + "," + data[i + 2]);
+      return seen.size;
+    }
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const levels = buildAllLevels(catalog);
+
+      await waitFor(() => frame.contentDocument && frame.contentDocument.querySelector("#level-options input"), 15000);
+      win = frame.contentWindow; doc = frame.contentDocument;
+      await sleep(300);
+      const instantOnLoad = $("#instant-toggle").checked;
+
+      // Loading and layout
+      record("level 1 loads with its title, star count, and three level choices",
+        text("#game-title") === "Cassiopeia" && text("#stars-lit") === "0 of 5" && doc.querySelectorAll('input[name="level"]').length === 3,
+        `${text("#game-title")}, ${text("#stars-lit")}`);
+      record("the board is drawn (not blank)", distinctColors() > 20, `${distinctColors()} distinct colors sampled`);
+      const rect = canvas().getBoundingClientRect();
+      record("the whole board is visible without scrolling and keeps its 9:16 shape",
+        rect.top >= 0 && rect.bottom <= win.innerHeight && rect.width > 180 && Math.abs(rect.width / rect.height - 360 / 640) < 0.01,
+        `${Math.round(rect.width)} × ${Math.round(rect.height)} in a ${win.innerWidth} × ${win.innerHeight} view`);
+      record("no horizontal overflow", doc.documentElement.scrollWidth <= win.innerWidth, `scrollWidth ${doc.documentElement.scrollWidth}`);
+      record("controls have accessible names and are at least 44px tall",
+        [...doc.querySelectorAll("button, .toggle input, .level-card")].every((el) => (el.textContent.trim() || (el.labels && el.labels.length) || el.getAttribute("aria-label")) && true) &&
+        [...doc.querySelectorAll(".button, .level-card")].every((el) => el.getBoundingClientRect().height >= 44),
+        [...doc.querySelectorAll(".button, .level-card")].map((el) => Math.round(el.getBoundingClientRect().height)).join(", "));
+      record("star states are available as text", doc.querySelectorAll("#star-list li").length === 5 && litList() === "00000");
+
+      // Keyboard aiming
+      canvas().focus();
+      key("ArrowRight"); key("ArrowRight"); key("ArrowRight");
+      const afterRight = text("#aim-readout");
+      key("ArrowLeft", { shiftKey: true });
+      record("arrow keys aim in 1° steps and Shift in 5° steps",
+        afterRight === "Aim: 3° right" && text("#aim-readout") === "Aim: 2° left", `${afterRight}, then ${text("#aim-readout")}`);
+      for (let i = 0; i < 30; i += 1) key("ArrowRight", { shiftKey: true });
+      record("aim is limited to 70°", text("#aim-readout") === "Aim: 70° right", text("#aim-readout"));
+      setAimDegrees(0);
+
+      // Instant result matches the rules module exactly
+      setInstant(true);
+      const expectations = [];
+      for (const aim of [-33, 12, 41]) {
+        const reference = createGame(levels[0]);
+        playShot(reference, deg(aim));
+        expectations.push({ aim, lit: reference.lit.map((x) => (x ? 1 : 0)).join(""), reason: null });
+      }
+      let firstShot = null;
+      let allMatch = true, details = [];
+      for (const expected of expectations) {
+        $("#reset-button").click();
+        setAimDegrees(expected.aim);
+        canvas().focus();
+        key(" ");
+        const got = litList();
+        if (!firstShot) firstShot = { aim: expected.aim, lit: got };
+        allMatch = allMatch && got === expected.lit && launches() === 1;
+        details.push(`${expected.aim}° → ${got} (rules ${expected.lit})`);
+      }
+      record("instant results from the screen match the rules module for the same aim", allMatch, details.join("; "));
+      record("an instant launch updates the count and announces a result",
+        launches() === 1 && /^Launch 1: /.test(text("#game-status")) && !$("#launch-button").disabled, text("#game-status"));
+
+      // Determinism through the UI
+      $("#reset-button").click();
+      setAimDegrees(firstShot.aim);
+      key(" ");
+      record("the same aim after a reset gives the same result", litList() === firstShot.lit && launches() === 1);
+
+      // Levels and reset
+      $("#reset-button").click();
+      record("reset clears stars and launches and says so",
+        litList() === "00000" && launches() === 0 && text("#game-status") === "Level reset.");
+      const second = doc.querySelectorAll('input[name="level"]')[1];
+      second.checked = true;
+      second.dispatchEvent(new win.Event("change", { bubbles: true }));
+      record("choosing level 2 loads the Little Dipper fresh",
+        text("#game-title") === "Little Dipper" && text("#stars-lit") === "0 of 7" && launches() === 0 && doc.querySelectorAll("#star-list li").length === 7,
+        JSON.stringify([text("#game-title"), text("#stars-lit"), launches(), doc.querySelectorAll("#star-list li").length]));
+      const first = doc.querySelectorAll('input[name="level"]')[0];
+      first.checked = true;
+      first.dispatchEvent(new win.Event("change", { bubbles: true }));
+
+      // Pointer: drag and release launches; releasing at the launcher cancels
+      setInstant(true);
+      pointer("pointerdown", 250, 250);
+      const aimAfterDown = readAimDegrees();
+      pointer("pointermove", 120, 200);
+      const aimAfterMove = readAimDegrees();
+      pointer("pointerup", 120, 200);
+      record("dragging aims toward the pointer and releasing launches",
+        aimAfterDown > 0 && aimAfterMove < 0 && launches() === 1, `aim ${aimAfterDown}° then ${aimAfterMove}°, launches ${launches()}`);
+      $("#reset-button").click();
+      pointer("pointerdown", 250, 250);
+      pointer("pointerup", BOARD.launcher.x, BOARD.launcher.y - 5);
+      record("releasing on the launcher cancels the shot",
+        launches() === 0 && /cancelled/.test(text("#game-status")), text("#game-status"));
+
+      // Is requestAnimationFrame ticking in this browser run?
+      let ticks = 0;
+      const countTicks = () => { ticks += 1; win.requestAnimationFrame(countTicks); };
+      countTicks();
+      await sleep(1000);
+      record("diagnostic: animation frames tick during the test run", ticks > 5, `${ticks} frames in 1 second`);
+
+      // Animated launch
+      $("#reset-button").click();
+      setInstant(false);
+      setAimDegrees(12);
+      key(" ");
+      const inFlight = $("#launch-button").disabled;
+      key(" ");
+      const second2 = launches();
+      // requestAnimationFrame is throttled in the headless run, so give the shot time to finish.
+      const finished = await waitFor(() => /^Launch 1: |filled/.test(text("#game-status")), 200000);
+      const reference = createGame(levels[0]);
+      playShot(reference, deg(12));
+      record("an animated launch flies, refuses a second launch, then ends with the same result as the rules",
+        inFlight && second2 === 1 && finished && litList() === reference.lit.map((x) => (x ? 1 : 0)).join("") && !$("#launch-button").disabled,
+        `inFlight ${inFlight}, launches after 2nd press ${second2}, finished ${finished}, status "${text("#game-status")}", lit ${litList()} vs ${reference.lit.map((x) => (x ? 1 : 0)).join("")}, button disabled ${$("#launch-button").disabled}`);
+
+      // Play level 1 to the end through the screen, using a plan found with the rules module
+      $("#reset-button").click();
+      const plan = [];
+      const sim = createGame(levels[0]);
+      while (!sim.won && plan.length < 20) {
+        let best = null;
+        for (let d = -70; d <= 70; d += 1) {
+          const trial = createGame(levels[0]);
+          trial.lit = [...sim.lit];
+          playShot(trial, deg(d));
+          const gain = trial.lit.filter(Boolean).length - sim.lit.filter(Boolean).length;
+          if (!best || gain > best.gain) best = { d, gain };
+        }
+        if (best.gain <= 0) break;
+        plan.push(best.d);
+        playShot(sim, deg(best.d));
+      }
+      setInstant(true);
+      for (const aim of plan) { setAimDegrees(aim); key(" "); }
+      record("clearing level 1 on the screen wins and reports the launch count",
+        sim.won && new RegExp(`Cassiopeia is filled in ${plan.length} launches?!`).test(text("#game-status")) && text("#stars-lit") === "5 of 5" && litList() === "11111",
+        `${plan.length} launches (${plan.join("°, ")}°): ${text("#game-status")}`);
+      key(" ");
+      record("after winning the launch button is off and extra launches do nothing",
+        $("#launch-button").disabled && launches() === plan.length, `launches ${launches()}`);
+
+      // Privacy
+      const resources = win.performance.getEntriesByType("resource").map((entry) => new URL(entry.name));
+      const external = resources.filter((url) => url.origin !== win.location.origin);
+      record("the game loads only its own files and makes no network request to anyone else",
+        external.length === 0 && resources.length >= 4, `${resources.length} requests, ${external.length} external`);
+
+      // Reduced motion default
+      const prefersReduced = win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      record("instant mode starts on exactly when the system asks for reduced motion",
+        instantOnLoad === prefersReduced, `prefers-reduced-motion ${prefersReduced}, instant mode on load ${instantOnLoad}`);
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — game checkpoint 3 play screen checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

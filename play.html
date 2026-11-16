@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#07081a">
+    <title>Inner Orbit — Star Launcher (prototype)</title>
+    <link rel="stylesheet" href="game.css">
+    <script type="module" src="game.js"></script>
+  </head>
+  <body>
+    <main class="game" aria-labelledby="game-title">
+      <header class="hud">
+        <div class="hud-title">
+          <p class="eyebrow">Star Launcher</p>
+          <h1 id="game-title">Loading…</h1>
+        </div>
+        <dl class="hud-counts">
+          <div><dt>Stars lit</dt><dd id="stars-lit">0 of 0</dd></div>
+          <div><dt>Launches</dt><dd id="launch-count">0</dd></div>
+        </dl>
+      </header>
+
+      <div class="board-wrap">
+        <canvas id="board" tabindex="0" role="img"
+          aria-label="Game board loading."
+          aria-describedby="aim-readout game-hint">
+          Star Launcher board. Use the buttons and the text below it to play.
+        </canvas>
+      </div>
+
+      <p id="aim-readout" class="aim-readout">Aim: straight up</p>
+      <p id="game-hint" class="hint">
+        Drag on the board and release to launch. Or use the arrow keys to aim and Space to launch.
+        Light every star in the constellation with as few launches as you can.
+      </p>
+      <p id="game-status" class="status" role="status" aria-live="polite"></p>
+
+      <div class="controls">
+        <button id="launch-button" class="button button-primary" type="button">Launch</button>
+        <button id="reset-button" class="button" type="button">Reset level</button>
+      </div>
+
+      <fieldset class="levels">
+        <legend>Level</legend>
+        <div id="level-options" class="level-options"></div>
+      </fieldset>
+
+      <label class="toggle">
+        <input id="instant-toggle" type="checkbox">
+        <span>Show each launch's result instantly (no animation)</span>
+      </label>
+
+      <ul id="star-list" class="sr-only" aria-label="Stars in this constellation"></ul>
+    </main>
+  </body>
+</html>

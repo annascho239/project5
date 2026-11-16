@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game checkpoint 1 level checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+
+  <script type="module">
+    import { BOARD, LEVELS, loadCatalog, buildLevel, buildAllLevels } from "../game-levels.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const correlation = (a, b) => {
+      const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      const ma = mean(a), mb = mean(b);
+      let num = 0, da = 0, db = 0;
+      for (let i = 0; i < a.length; i += 1) {
+        num += (a[i] - ma) * (b[i] - mb);
+        da += (a[i] - ma) ** 2;
+        db += (b[i] - mb) ** 2;
+      }
+      return num / Math.sqrt(da * db);
+    };
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const levels = buildAllLevels(catalog);
+
+      record("three levels are built, easy to harder",
+        levels.length === 3 && levels[0].stars.length < levels[1].stars.length && levels[1].stars.length < levels[2].stars.length,
+        levels.map((l) => `${l.title} (${l.stars.length} stars)`).join(", "));
+      record("levels are real catalog constellations with the expected star counts",
+        levels.map((l) => l.id).join() === "Cas,UMi,Cyg" && levels.map((l) => l.stars.length).join() === "5,7,9");
+
+      for (const level of levels) {
+        const tag = `${level.title}: `;
+        const { region, starRadius, width, height, bumperZone, wallClearance, bumperRadius } = BOARD;
+
+        const inside = level.stars.every((s) =>
+          s.x - starRadius >= 0 && s.x + starRadius <= width && s.y - starRadius >= 0 && s.y + starRadius <= height &&
+          s.x >= region.left - 0.01 && s.x <= region.right + 0.01 && s.y >= region.top - 0.01 && s.y <= region.bottom + 0.01);
+        record(tag + "every star is inside the fitting region and the board", inside);
+
+        let minSeparation = Infinity;
+        for (let i = 0; i < level.stars.length; i += 1) for (let j = i + 1; j < level.stars.length; j += 1) {
+          minSeparation = Math.min(minSeparation, Math.hypot(level.stars[i].x - level.stars[j].x, level.stars[i].y - level.stars[j].y));
+        }
+        record(tag + "stars are separated enough to hit one at a time", minSeparation >= 2 * starRadius + 4,
+          `closest pair ${minSeparation.toFixed(1)} units (needs ${2 * starRadius + 4})`);
+
+        // Independent recomputation of the catalog's distinct stars and links.
+        const polylines = catalog.lines.get(level.id);
+        const keyOf = (p) => p.join(",");
+        const distinct = new Map();
+        polylines.forEach((line) => line.forEach((p) => distinct.set(keyOf(p), p)));
+        const edgeKeys = new Set();
+        polylines.forEach((line) => {
+          for (let i = 0; i < line.length - 1; i += 1) {
+            if (keyOf(line[i]) === keyOf(line[i + 1])) continue;
+            edgeKeys.add([keyOf(line[i]), keyOf(line[i + 1])].sort().join("|"));
+          }
+        });
+        record(tag + "star and link counts match the catalog's drawn lines",
+          level.stars.length === distinct.size && level.links.length === edgeKeys.size,
+          `${level.stars.length} stars, ${level.links.length} links`);
+
+        const uniqueLinks = new Set(level.links.map(([a, b]) => `${a}-${b}`));
+        const degrees = new Array(level.stars.length).fill(0);
+        level.links.forEach(([a, b]) => { degrees[a] += 1; degrees[b] += 1; });
+        record(tag + "links are valid, unique, and every star is connected",
+          uniqueLinks.size === level.links.length && level.links.every(([a, b]) => a !== b && a >= 0 && b >= 0 && a < level.stars.length && b < level.stars.length) &&
+          degrees.every((degree) => degree >= 1));
+
+        // Fidelity checks from raw catalog coordinates, independent of the builder's projection math.
+        const ordered = [...distinct.values()].sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+        const unit = ordered.map(([ra, dec]) => {
+          const a = (ra * Math.PI) / 180, d = (dec * Math.PI) / 180;
+          return [Math.cos(d) * Math.cos(a), Math.cos(d) * Math.sin(a), Math.sin(d)];
+        });
+        const sky = [], board = [];
+        for (let i = 0; i < unit.length; i += 1) for (let j = i + 1; j < unit.length; j += 1) {
+          const dot = unit[i][0] * unit[j][0] + unit[i][1] * unit[j][1] + unit[i][2] * unit[j][2];
+          sky.push(Math.acos(Math.min(1, Math.max(-1, dot))));
+          board.push(Math.hypot(level.stars[i].x - level.stars[j].x, level.stars[i].y - level.stars[j].y));
+        }
+        const shape = correlation(sky, board);
+        record(tag + "shape matches the sky: board distances track true angular separations",
+          shape > 0.97, `correlation ${shape.toFixed(3)} over ${sky.length} pairs`);
+
+        // Handedness: seen from Earth (inside the sphere) north is up and east is left.
+        const centre = unit.reduce((sum, v) => sum.map((c, k) => c + v[k]), [0, 0, 0]);
+        const norm = Math.hypot(...centre);
+        const n = centre.map((c) => c / norm);
+        const minus = (p, q) => p.map((c, k) => c - q[k]);
+        const cross = (p, q) => [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+        let best = { area: 0, skySign: 0, screenSign: 0 };
+        for (let i = 0; i < unit.length; i += 1) for (let j = i + 1; j < unit.length; j += 1) for (let k = j + 1; k < unit.length; k += 1) {
+          const t3 = cross(minus(unit[j], unit[i]), minus(unit[k], unit[i]));
+          const skyTriple = t3[0] * n[0] + t3[1] * n[1] + t3[2] * n[2];
+          const a = level.stars[i], b = level.stars[j], c = level.stars[k];
+          const screenCross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+          if (Math.abs(screenCross) > best.area) best = { area: Math.abs(screenCross), skySign: Math.sign(skyTriple), screenSign: Math.sign(screenCross) };
+        }
+        // Counter-clockwise from outside the sphere is clockwise from inside, which is positive in screen (y-down) terms.
+        record(tag + "pattern is not mirrored (as seen looking up at the sky)", best.skySign === best.screenSign && best.skySign !== 0,
+          `largest triangle: sky ${best.skySign}, screen ${best.screenSign}`);
+
+        const northIndex = ordered.reduce((best2, p, idx) => (p[1] > ordered[best2][1] ? idx : best2), 0);
+        const southIndex = ordered.reduce((best2, p, idx) => (p[1] < ordered[best2][1] ? idx : best2), 0);
+        record(tag + "the most northern star is drawn above the most southern one",
+          level.stars[northIndex].y < level.stars[southIndex].y,
+          `y ${level.stars[northIndex].y} vs ${level.stars[southIndex].y}`);
+
+        const spec = LEVELS.find((l) => l.id === level.id);
+        const bumperOk = level.bumpers.length === spec.bumpers && level.bumpers.every((b) =>
+          b.x - bumperRadius >= wallClearance && b.x + bumperRadius <= width - wallClearance &&
+          b.y >= bumperZone.top && b.y <= bumperZone.bottom);
+        record(tag + "bumpers: expected count, inside the walls and play band, clear of the launcher",
+          bumperOk && level.bumpers.every((b) => Math.hypot(b.x - BOARD.launcher.x, b.y - BOARD.launcher.y) > 80), `${level.bumpers.length} bumpers`);
+
+        let minToStar = Infinity, minToBumper = Infinity;
+        level.bumpers.forEach((b, i) => {
+          level.stars.forEach((s) => { minToStar = Math.min(minToStar, Math.hypot(b.x - s.x, b.y - s.y)); });
+          level.bumpers.forEach((o, j) => { if (i < j) minToBumper = Math.min(minToBumper, Math.hypot(b.x - o.x, b.y - o.y)); });
+        });
+        record(tag + "bumpers never overlap or crowd a star or each other",
+          minToStar >= BOARD.bumperToStarClearance && minToStar > starRadius + bumperRadius && minToBumper >= BOARD.bumperToBumperClearance,
+          `closest to a star ${minToStar.toFixed(1)}, to another bumper ${minToBumper.toFixed(1)}`);
+
+        const again = buildLevel(spec, catalog);
+        record(tag + "building the level twice gives identical data", JSON.stringify(again) === JSON.stringify(level));
+
+        const strings = [level.title, level.facts.latin, level.facts.english, level.facts.genitive, level.facts.abbreviation];
+        record(tag + "names use ordinary single spaces only (the catalog has typographic spaces)",
+          strings.every((s) => /^\S+( \S+)*$/.test(s)), JSON.stringify(strings));
+
+        const expectedKeys = "abbreviation,english,genitive,latin,linkCount,starCount";
+        record(tag + "facts come only from the catalog",
+          Object.keys(level.facts).sort().join() === expectedKeys && level.facts.abbreviation === level.id &&
+          level.facts.starCount === level.stars.length && !!level.facts.latin && !!level.facts.genitive,
+          `${level.facts.latin} / ${level.facts.genitive} / ${level.facts.abbreviation}`);
+      }
+
+      let threw = false;
+      try { buildLevel({ id: "Nope", bumpers: 1 }, catalog); } catch { threw = true; }
+      record("an unknown constellation is rejected", threw);
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — game checkpoint 1 level checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>
