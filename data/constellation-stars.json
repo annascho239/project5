@@ -1,0 +1,973 @@
+{
+ "about": "Derived by tools/make-star-facts.py from stars.6.json (XHIP, Anderson and Francis 2012), starnames.json, and constellations.lines.json in vendor/d3-celestial/data.",
+ "constellations": {
+  "And": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "21",
+    "hip": 677,
+    "magnitude": 2.07,
+    "name": "Alpheratz"
+   },
+   "matched": 17,
+   "unmatched": 0
+  },
+  "Ant": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 51172,
+    "magnitude": 4.28,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Aps": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 72370,
+    "magnitude": 3.83,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Aql": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "53",
+    "hip": 97649,
+    "magnitude": 0.76,
+    "name": "Altair"
+   },
+   "matched": 8,
+   "unmatched": 0
+  },
+  "Aqr": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "22",
+    "hip": 106278,
+    "magnitude": 2.9,
+    "name": "Sadalsuud"
+   },
+   "matched": 15,
+   "unmatched": 0
+  },
+  "Ara": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "",
+    "hip": 85258,
+    "magnitude": 2.84,
+    "name": ""
+   },
+   "matched": 7,
+   "unmatched": 0
+  },
+  "Ari": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "13",
+    "hip": 9884,
+    "magnitude": 2.01,
+    "name": "Hamal"
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Aur": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "13",
+    "hip": 24608,
+    "magnitude": 0.08,
+    "name": "Capella"
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Boo": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "16",
+    "hip": 69673,
+    "magnitude": -0.05,
+    "name": "Arcturus"
+   },
+   "matched": 12,
+   "unmatched": 0
+  },
+  "CMa": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "9",
+    "hip": 32349,
+    "magnitude": -1.44,
+    "name": "Sirius"
+   },
+   "matched": 11,
+   "unmatched": 0
+  },
+  "CMi": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "10",
+    "hip": 37279,
+    "magnitude": 0.4,
+    "name": "Procyon"
+   },
+   "matched": 2,
+   "unmatched": 0
+  },
+  "CVn": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "8",
+    "hip": 61317,
+    "magnitude": 4.24,
+    "name": "Chara"
+   },
+   "matched": 2,
+   "unmatched": 0
+  },
+  "Cae": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 21770,
+    "magnitude": 4.44,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Cam": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "10",
+    "hip": 23522,
+    "magnitude": 4.03,
+    "name": ""
+   },
+   "matched": 8,
+   "unmatched": 0
+  },
+  "Cap": {
+   "brightest": {
+    "bayer": "δ",
+    "flamsteed": "49",
+    "hip": 107556,
+    "magnitude": 2.85,
+    "name": "Deneb Algedi"
+   },
+   "matched": 10,
+   "unmatched": 0
+  },
+  "Car": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 30438,
+    "magnitude": -0.62,
+    "name": "Canopus"
+   },
+   "matched": 17,
+   "unmatched": 0
+  },
+  "Cas": {
+   "brightest": {
+    "bayer": "γ",
+    "flamsteed": "27",
+    "hip": 4427,
+    "magnitude": 2.15,
+    "name": "Navi"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Cen": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "",
+    "hip": 68702,
+    "magnitude": 0.61,
+    "name": "Hadar"
+   },
+   "matched": 16,
+   "unmatched": 0
+  },
+  "Cep": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "5",
+    "hip": 105199,
+    "magnitude": 2.45,
+    "name": "Alderamin"
+   },
+   "matched": 10,
+   "unmatched": 0
+  },
+  "Cet": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "16",
+    "hip": 3419,
+    "magnitude": 2.04,
+    "name": "Diphda"
+   },
+   "matched": 13,
+   "unmatched": 1
+  },
+  "Cha": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 40702,
+    "magnitude": 4.05,
+    "name": ""
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Cir": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 71908,
+    "magnitude": 3.18,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Cnc": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "17",
+    "hip": 40526,
+    "magnitude": 3.53,
+    "name": "Tarf"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Col": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 26634,
+    "magnitude": 2.65,
+    "name": "Phact"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Com": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "43",
+    "hip": 64394,
+    "magnitude": 4.23,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "CrA": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "",
+    "hip": 94160,
+    "magnitude": 4.1,
+    "name": ""
+   },
+   "matched": 8,
+   "unmatched": 0
+  },
+  "CrB": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "5",
+    "hip": 76267,
+    "magnitude": 2.22,
+    "name": "Alphecca"
+   },
+   "matched": 7,
+   "unmatched": 0
+  },
+  "Crt": {
+   "brightest": {
+    "bayer": "δ",
+    "flamsteed": "12",
+    "hip": 55282,
+    "magnitude": 3.56,
+    "name": "Labr"
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Cru": {
+   "brightest": {
+    "bayer": "α1",
+    "flamsteed": "",
+    "hip": 60718,
+    "magnitude": 0.77,
+    "name": "Acrux"
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Crv": {
+   "brightest": {
+    "bayer": "γ",
+    "flamsteed": "4",
+    "hip": 59803,
+    "magnitude": 2.58,
+    "name": "Gienah"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Cyg": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "50",
+    "hip": 102098,
+    "magnitude": 1.25,
+    "name": "Deneb"
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Del": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "6",
+    "hip": 101769,
+    "magnitude": 3.64,
+    "name": "Rotanev"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Dor": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 21281,
+    "magnitude": 3.3,
+    "name": ""
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Dra": {
+   "brightest": {
+    "bayer": "γ",
+    "flamsteed": "33",
+    "hip": 87833,
+    "magnitude": 2.24,
+    "name": "Eltanin"
+   },
+   "matched": 15,
+   "unmatched": 0
+  },
+  "Equ": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "8",
+    "hip": 104987,
+    "magnitude": 3.92,
+    "name": "Kitalpha"
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Eri": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 7588,
+    "magnitude": 0.45,
+    "name": "Achernar"
+   },
+   "matched": 27,
+   "unmatched": 0
+  },
+  "For": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 14879,
+    "magnitude": 3.8,
+    "name": "Dalim"
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Gem": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "78",
+    "hip": 37826,
+    "magnitude": 1.16,
+    "name": "Pollux"
+   },
+   "matched": 12,
+   "unmatched": 0
+  },
+  "Gru": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 109268,
+    "magnitude": 1.73,
+    "name": "Alnair"
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Her": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "27",
+    "hip": 80816,
+    "magnitude": 2.78,
+    "name": "Kornephoros"
+   },
+   "matched": 17,
+   "unmatched": 0
+  },
+  "Hor": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 19747,
+    "magnitude": 3.85,
+    "name": ""
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Hya": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "30",
+    "hip": 46390,
+    "magnitude": 1.99,
+    "name": "Alphard"
+   },
+   "matched": 18,
+   "unmatched": 0
+  },
+  "Hyi": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "",
+    "hip": 2021,
+    "magnitude": 2.82,
+    "name": ""
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Ind": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 101772,
+    "magnitude": 3.11,
+    "name": "Persian"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "LMi": {
+   "brightest": {
+    "bayer": "",
+    "flamsteed": "46",
+    "hip": 53229,
+    "magnitude": 3.79,
+    "name": "Praecipua"
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Lac": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "7",
+    "hip": 111169,
+    "magnitude": 3.76,
+    "name": ""
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Leo": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "32",
+    "hip": 49669,
+    "magnitude": 1.36,
+    "name": "Regulus"
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Lep": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "11",
+    "hip": 25985,
+    "magnitude": 2.58,
+    "name": "Arneb"
+   },
+   "matched": 11,
+   "unmatched": 0
+  },
+  "Lib": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "27",
+    "hip": 74785,
+    "magnitude": 2.61,
+    "name": "Zubeneschamali"
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Lup": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 71860,
+    "magnitude": 2.3,
+    "name": "Men"
+   },
+   "matched": 12,
+   "unmatched": 0
+  },
+  "Lyn": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "40",
+    "hip": 45860,
+    "magnitude": 3.14,
+    "name": ""
+   },
+   "matched": 7,
+   "unmatched": 0
+  },
+  "Lyr": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "3",
+    "hip": 91262,
+    "magnitude": 0.03,
+    "name": "Vega"
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Men": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 29271,
+    "magnitude": 5.08,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Mic": {
+   "brightest": {
+    "bayer": "γ",
+    "flamsteed": "",
+    "hip": 103738,
+    "magnitude": 4.67,
+    "name": ""
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Mon": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "11",
+    "hip": 30867,
+    "magnitude": 3.76,
+    "name": ""
+   },
+   "matched": 9,
+   "unmatched": 0
+  },
+  "Mus": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 61585,
+    "magnitude": 2.69,
+    "name": ""
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Nor": {
+   "brightest": {
+    "bayer": "γ2",
+    "flamsteed": "",
+    "hip": 80000,
+    "magnitude": 4.01,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Oct": {
+   "brightest": {
+    "bayer": "ν",
+    "flamsteed": "",
+    "hip": 107089,
+    "magnitude": 3.73,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Oph": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "55",
+    "hip": 86032,
+    "magnitude": 2.08,
+    "name": "Rasalhague"
+   },
+   "matched": 16,
+   "unmatched": 0
+  },
+  "Ori": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "19",
+    "hip": 24436,
+    "magnitude": 0.18,
+    "name": "Rigel"
+   },
+   "matched": 23,
+   "unmatched": 0
+  },
+  "Pav": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 100751,
+    "magnitude": 1.94,
+    "name": "Peacock"
+   },
+   "matched": 10,
+   "unmatched": 0
+  },
+  "Peg": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "21",
+    "hip": 677,
+    "magnitude": 2.07,
+    "name": "Alpheratz"
+   },
+   "matched": 14,
+   "unmatched": 0
+  },
+  "Per": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "33",
+    "hip": 15863,
+    "magnitude": 1.79,
+    "name": "Mirfak"
+   },
+   "matched": 23,
+   "unmatched": 0
+  },
+  "Phe": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 2081,
+    "magnitude": 2.4,
+    "name": "Ankaa"
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Pic": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 32607,
+    "magnitude": 3.24,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "PsA": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "24",
+    "hip": 113368,
+    "magnitude": 1.17,
+    "name": "Fomalhaut"
+   },
+   "matched": 8,
+   "unmatched": 0
+  },
+  "Psc": {
+   "brightest": {
+    "bayer": "η",
+    "flamsteed": "99",
+    "hip": 7097,
+    "magnitude": 3.62,
+    "name": "Alpherg"
+   },
+   "matched": 22,
+   "unmatched": 0
+  },
+  "Pup": {
+   "brightest": {
+    "bayer": "γ2",
+    "flamsteed": "",
+    "hip": 39953,
+    "magnitude": 1.75,
+    "name": "Regor"
+   },
+   "matched": 11,
+   "unmatched": 0
+  },
+  "Pyx": {
+   "brightest": {
+    "bayer": "ζ",
+    "flamsteed": "",
+    "hip": 39429,
+    "magnitude": 2.21,
+    "name": "Naos"
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Ret": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 19780,
+    "magnitude": 3.33,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Scl": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 4577,
+    "magnitude": 4.3,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Sco": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "21",
+    "hip": 80763,
+    "magnitude": 1.06,
+    "name": "Antares"
+   },
+   "matched": 14,
+   "unmatched": 0
+  },
+  "Sct": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 91117,
+    "magnitude": 3.85,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Ser": {
+   "brightest": {
+    "bayer": "η",
+    "flamsteed": "35",
+    "hip": 84012,
+    "magnitude": 2.43,
+    "name": "Sabik"
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "Sex": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "15",
+    "hip": 49641,
+    "magnitude": 4.48,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Sge": {
+   "brightest": {
+    "bayer": "γ",
+    "flamsteed": "12",
+    "hip": 98337,
+    "magnitude": 3.51,
+    "name": ""
+   },
+   "matched": 4,
+   "unmatched": 0
+  },
+  "Sgr": {
+   "brightest": {
+    "bayer": "ε",
+    "flamsteed": "20",
+    "hip": 90185,
+    "magnitude": 1.79,
+    "name": "Kaus Australis"
+   },
+   "matched": 25,
+   "unmatched": 0
+  },
+  "Tau": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "87",
+    "hip": 21421,
+    "magnitude": 0.87,
+    "name": "Aldebaran"
+   },
+   "matched": 12,
+   "unmatched": 0
+  },
+  "Tel": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 90422,
+    "magnitude": 3.49,
+    "name": ""
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "TrA": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 82273,
+    "magnitude": 1.91,
+    "name": "Atria"
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Tri": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "4",
+    "hip": 10064,
+    "magnitude": 3,
+    "name": "Mizan"
+   },
+   "matched": 3,
+   "unmatched": 0
+  },
+  "Tuc": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "",
+    "hip": 110130,
+    "magnitude": 2.87,
+    "name": ""
+   },
+   "matched": 6,
+   "unmatched": 0
+  },
+  "UMa": {
+   "brightest": {
+    "bayer": "ε",
+    "flamsteed": "77",
+    "hip": 62956,
+    "magnitude": 1.76,
+    "name": "Alioth"
+   },
+   "matched": 20,
+   "unmatched": 0
+  },
+  "UMi": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "1",
+    "hip": 11767,
+    "magnitude": 1.97,
+    "name": "Polaris"
+   },
+   "matched": 7,
+   "unmatched": 0
+  },
+  "Vel": {
+   "brightest": {
+    "bayer": "γ2",
+    "flamsteed": "",
+    "hip": 39953,
+    "magnitude": 1.75,
+    "name": "Regor"
+   },
+   "matched": 8,
+   "unmatched": 0
+  },
+  "Vir": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "67",
+    "hip": 65474,
+    "magnitude": 0.98,
+    "name": "Spica"
+   },
+   "matched": 13,
+   "unmatched": 0
+  },
+  "Vol": {
+   "brightest": {
+    "bayer": "β",
+    "flamsteed": "",
+    "hip": 41312,
+    "magnitude": 3.77,
+    "name": ""
+   },
+   "matched": 5,
+   "unmatched": 0
+  },
+  "Vul": {
+   "brightest": {
+    "bayer": "α",
+    "flamsteed": "6",
+    "hip": 95771,
+    "magnitude": 4.44,
+    "name": "Anser"
+   },
+   "matched": 5,
+   "unmatched": 0
+  }
+ }
+}

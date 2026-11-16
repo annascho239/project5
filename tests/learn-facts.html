@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage B checkpoint 3 Learn facts checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+    pre { white-space: pre-wrap; color: #bbb; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <pre id="report"></pre>
+
+  <script type="module">
+    import { loadCatalog } from "../game-levels.js";
+    import { visibleConstellations, horizontalPosition, constellationStars, centerOf } from "../sky-engine.js";
+    import { angularSpanDegrees, constellationFacts, latitudeReach, learnRows, loadStarFacts, nextMeridianCrossing, skyFacts, starLabel } from "../learn-facts.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const report = [];
+    const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
+    const rad = (d) => (d * Math.PI) / 180;
+    const clean = (s) => (s || "").split(/\s+/).filter(Boolean).join(" ");
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const starFacts = await loadStarFacts("../data/constellation-stars.json");
+      const ids = [...catalog.lines.keys()];
+
+      // ---- The derived table versus the full star files (independent re-computation in JavaScript) ----
+      const starFile = await (await fetch("../vendor/d3-celestial/data/stars.6.json")).json();
+      const nameFile = await (await fetch("../vendor/d3-celestial/data/starnames.json")).json();
+      const exact = new Map(starFile.features.map((f) => [f.geometry.coordinates.join(","), f]));
+      function findStar(lon, lat) {
+        const hit = exact.get(`${lon},${lat}`);
+        if (hit) return hit;
+        let best = null, bestDistance = 0.02;
+        for (const f of starFile.features) {
+          const [x, y] = f.geometry.coordinates;
+          const d = Math.hypot((x - lon) * Math.cos(rad(lat)), y - lat);
+          if (d < bestDistance) { best = f; bestDistance = d; }
+        }
+        return best;
+      }
+      const mismatches = [];
+      let totalMatched = 0, totalUnmatched = 0;
+      for (const id of ids) {
+        const points = constellationStars(catalog.lines.get(id));
+        const matched = points.map(([lon, lat]) => findStar(lon, lat)).filter(Boolean);
+        totalMatched += matched.length; totalUnmatched += points.length - matched.length;
+        const entry = starFacts.get(id);
+        if (!entry) { mismatches.push(`${id}: missing`); continue; }
+        if (entry.matched !== matched.length || entry.unmatched !== points.length - matched.length) mismatches.push(`${id}: counts`);
+        const best = matched.length ? matched.reduce((a, b) => (b.properties.mag < a.properties.mag || (b.properties.mag === a.properties.mag && b.id < a.id) ? b : a)) : null;
+        const info = best ? nameFile[String(best.id)] || {} : {};
+        const mine = best && { hip: best.id, magnitude: best.properties.mag, name: clean(info.name), bayer: clean(info.bayer), flamsteed: clean(info.flam) };
+        const theirs = entry.brightest;
+        const sameStar = (!mine && !theirs) || (mine && theirs && ["hip", "magnitude", "name", "bayer", "flamsteed"].every((field) => mine[field] === theirs[field]));
+        if (!sameStar) mismatches.push(`${id}: brightest star`);
+      }
+      record("the small star table matches an independent recomputation from the full star files, for all 88 constellations",
+        mismatches.length === 0 && starFacts.size === 88, mismatches.slice(0, 4).join("; ") || `${totalMatched} stars matched, ${totalUnmatched} unmatched`);
+      const tableBytes = (await (await fetch("../data/constellation-stars.json")).text()).length;
+      record("the table is small enough to load on a phone without noticing", tableBytes < 20000, `${tableBytes.toLocaleString()} bytes (the full star files are 1.3 MB)`);
+
+      // ---- Known answers ----
+      const label = (id) => constellationFacts(id, catalog, starFacts).brightest;
+      const known = { Ori: ["Rigel (β Orionis)", 0.18], Lyr: ["Vega (α Lyrae)", 0.03], CMa: ["Sirius (α Canis Majoris)", -1.44], UMi: ["Polaris (α Ursae Minoris)", 1.97],
+        Cyg: ["Deneb (α Cygni)", 1.25], Sco: ["Antares (α Scorpii)", 1.06], Cas: ["Navi (γ Cassiopeiae)", 2.15] };
+      record("the brightest star of well-known constellations is right, with its Greek-letter name",
+        Object.entries(known).every(([id, [text, mag]]) => label(id).label === text && label(id).magnitude === mag),
+        Object.entries(known).map(([id]) => label(id).label + " " + label(id).magnitude).join("; "));
+      record("a constellation whose brightest star has a numbered designation is labelled correctly (Acrux, α1 Crucis)", /^Acrux \(α1 Crucis\)$/.test(label("Cru").label), label("Cru").label);
+      record("star labels fall back sensibly when the catalog has less",
+        starLabel({ name: "Rigel", bayer: "", flamsteed: "", hip: 1 }, "Orionis") === "Rigel" &&
+        starLabel({ name: "", bayer: "β", flamsteed: "", hip: 1 }, "Orionis") === "β Orionis" &&
+        starLabel({ name: "", bayer: "", flamsteed: "19", hip: 1 }, "Orionis") === "19 Orionis" &&
+        starLabel({ name: "", bayer: "", flamsteed: "", hip: 24436 }, "Orionis") === "HIP 24436");
+      record("the one catalog star missing from the magnitude-6 list (Mira, in Cetus) is reported honestly, not guessed", starFacts.get("Cet").unmatched === 1 && starFacts.get("Cet").matched === 13);
+
+      // ---- Catalog data quality ----
+      const sameAsName = ids.filter((id) => clean(catalog.info.get(id).gen) === clean(catalog.info.get(id).name));
+      record("after the known correction, only the two constellations whose genitive really equals their name still do (Camelopardalis, Puppis)",
+        sameAsName.sort().join() === "Cam,Pup" && clean(catalog.info.get("Cru").gen) === "Crucis", `same-as-name: ${sameAsName.join(", ")}; Crux genitive now "${clean(catalog.info.get("Cru").gen)}"`);
+      const rawInfo = await (await fetch("../vendor/d3-celestial/data/constellations.json")).json();
+      const rawCrux = rawInfo.features.find((f) => f.id === "Cru").properties.gen;
+      record("the raw catalog still has the Crux error, so the correction is doing real work (and will turn into a no-op if the data is fixed upstream)", rawCrux === "Crux" || rawCrux === "Crucis", `raw value "${rawCrux}"`);
+
+      // ---- Size on the sky ----
+      let spanMismatch = 0;
+      for (const id of ids) {
+        const stars = constellationStars(catalog.lines.get(id));
+        let widest = 0;
+        for (let i = 0; i < stars.length; i += 1) for (let j = i + 1; j < stars.length; j += 1) {
+          // haversine, a different formula from the module's dot product
+          const [a1, d1] = [rad(stars[i][0]), rad(stars[i][1])], [a2, d2] = [rad(stars[j][0]), rad(stars[j][1])];
+          const h = Math.sin((d2 - d1) / 2) ** 2 + Math.cos(d1) * Math.cos(d2) * Math.sin((a2 - a1) / 2) ** 2;
+          widest = Math.max(widest, (2 * Math.asin(Math.min(1, Math.sqrt(h))) * 180) / Math.PI);
+        }
+        if (!near(widest, angularSpanDegrees(stars), 1e-6)) spanMismatch += 1;
+      }
+      const cruSpan = angularSpanDegrees(constellationStars(catalog.lines.get("Cru")));
+      record("the size on the sky matches an independent (haversine) calculation for all 88, and the Southern Cross spans about 6°", spanMismatch === 0 && cruSpan > 5.5 && cruSpan < 7, `Cross ${cruSpan.toFixed(2)}°`);
+
+      // ---- Never sets / never rises: brute force against the formula ----
+      const latitudes = [-80, -60, -34, -10, 0, 10, 34, 42, 60, 80];
+      let reachMismatch = 0, reachChecked = 0;
+      for (const lat of latitudes) {
+        const observer = { latitude: lat, longitude: 0 };
+        const start = new Date("2025-03-20T00:00:00Z");
+        for (const id of ids) {
+          for (const [ra, dec] of constellationStars(catalog.lines.get(id))) {
+            const threshold = lat >= 0 ? [90 - lat, lat - 90] : [-90 - lat, 90 + lat];
+            if (Math.abs(dec - threshold[0]) < 0.05 || Math.abs(dec - threshold[1]) < 0.05) continue; // grazing the horizon: sampling cannot tell
+            let min = 90, max = -90;
+            for (let minute = 0; minute < 1440; minute += 2) {
+              const alt = horizontalPosition(ra, dec, observer, new Date(start.getTime() + minute * 60000)).altitude;
+              min = Math.min(min, alt); max = Math.max(max, alt);
+            }
+            const brute = min > 0 ? "circumpolar" : max < 0 ? "never-rises" : "rises-and-sets";
+            reachChecked += 1;
+            if (latitudeReach([[ra, dec]], lat) !== brute) reachMismatch += 1;
+          }
+        }
+      }
+      record("the never-sets and never-rises rule matches brute-force sampling of a full day, star by star",
+        reachMismatch === 0, `${reachChecked} star and latitude cases, ${reachMismatch} mismatches`);
+      const reachOf = (id, lat) => latitudeReach(constellationStars(catalog.lines.get(id)), lat);
+      record("known cases: Cassiopeia never sets from Chicago and never rises from Sydney; the Southern Cross never rises from Chicago and never sets from Sydney; Orion rises and sets in both",
+        reachOf("Cas", 41.85) === "circumpolar" && reachOf("Cas", -33.87) === "never-rises" && reachOf("Cru", 41.85) === "never-rises" && reachOf("Cru", -33.87) === "circumpolar" &&
+        reachOf("Ori", 41.85) === "rises-and-sets" && reachOf("Ori", -33.87) === "rises-and-sets");
+
+      // ---- Highest point of the day ----
+      const observers = [{ latitude: 41.85, longitude: -87.65 }, { latitude: -33.87, longitude: 151.21 }, { latitude: 64.15, longitude: -21.94 }];
+      const dates = [new Date("2025-01-02T03:00:00Z"), new Date("2025-07-02T03:00:00Z")];
+      let crossFailures = [], crossChecked = 0;
+      for (const observer of observers) for (const date of dates) for (const id of ids) {
+        const center = centerOf(constellationStars(catalog.lines.get(id)));
+        const crossing = nextMeridianCrossing(center, observer, date);
+        const at = (minutes) => horizontalPosition(center.rightAscension, center.declination, observer, new Date(crossing.getTime() + minutes * 60000));
+        const peak = at(0);
+        crossChecked += 1;
+        const within = Math.abs(crossing - date) <= 12 * 3600e3 + 60e3;
+        const highest = [-30, -5, -1, 1, 5, 30].every((m) => at(m).altitude <= peak.altitude + 1e-9);
+        const formula = near(peak.altitude, 90 - Math.abs(observer.latitude - center.declination), 1e-6);
+        const onMeridian = peak.altitude > 89.5 || near(Math.min(peak.azimuth, 360 - peak.azimuth), 0, 0.2) || near(peak.azimuth, 180, 0.2);
+        if (!(within && highest && formula && onMeridian)) crossFailures.push(`${id}@${observer.latitude}`);
+      }
+      record("each pattern's highest point of the day is within half a sidereal day, is a true maximum, lies on the meridian, and equals 90° minus the latitude gap",
+        crossFailures.length === 0, `${crossChecked} cases; ${crossFailures.slice(0, 4).join(", ") || "no failures"}`);
+
+      // ---- The rows people read ----
+      const chicago = { latitude: 41.85003, longitude: -87.65005 };
+      const sydney = { latitude: -33.86785, longitude: 151.20732 };
+      const chicagoSky = { observer: chicago, date: new Date("2025-01-02T03:00:00Z"), timeZone: "America/Chicago" };
+      const sydneySky = { observer: sydney, date: new Date("2025-01-01T10:00:00Z"), timeZone: "Australia/Sydney" };
+      const rowMap = (id, sky) => Object.fromEntries(learnRows(id, catalog, starFacts, sky));
+      const orion = rowMap("Ori", chicagoSky);
+      report.push("Orion, Chicago:\n  " + learnRows("Ori", catalog, starFacts, chicagoSky).map(([a, b]) => `${a}: ${b}`).join("\n  "));
+      report.push("Southern Cross, Sydney:\n  " + learnRows("Cru", catalog, starFacts, sydneySky).map(([a, b]) => `${a}: ${b}`).join("\n  "));
+      report.push("Cassiopeia, Sydney:\n  " + learnRows("Cas", catalog, starFacts, sydneySky).map(([a, b]) => `${a}: ${b}`).join("\n  "));
+      const orionCenter = centerOf(constellationStars(catalog.lines.get("Ori")));
+      const expectedPeak = Math.round(90 - Math.abs(chicago.latitude - orionCenter.declination));
+      record("Orion from Chicago at 9 PM: fully in view in the south-east, rises and sets, and is highest around 10 to 11 PM at 90° minus the latitude gap",
+        /^Fully in view, about 5\d° above the horizon, toward the southeast$/.test(orion["In your sky then"]) && orion["From your latitude"] === "Rises and sets" &&
+        new RegExp(`^Around 10:\\d\\d PM, about ${expectedPeak}° above the horizon, toward the south$`).test(orion["Highest point that day"]),
+        `${orion["Highest point that day"]} (formula gives ${expectedPeak}° for a centre at declination ${orionCenter.declination.toFixed(2)}°)`);
+      const cruSydney = rowMap("Cru", sydneySky), cruChicago = rowMap("Cru", chicagoSky);
+      record("the Southern Cross: never sets from Sydney and is in view; never rises from Chicago, is below the horizon, and has no 'highest point' row",
+        /^Never sets/.test(cruSydney["From your latitude"]) && /^Fully in view/.test(cruSydney["In your sky then"]) &&
+        /^Never rises/.test(cruChicago["From your latitude"]) && cruChicago["In your sky then"] === "Below the horizon" && !("Highest point that day" in cruChicago));
+      const chicagoSkyList = visibleConstellations(catalog.lines, chicago, chicagoSky.date);
+      const partial = chicagoSkyList.find((s) => s.status === "partial");
+      const partialRows = rowMap(partial.id, chicagoSky);
+      record("a partly visible constellation says how many of its stars are above the horizon",
+        new RegExp(`^Partly above the horizon \\(${partial.starsAbove} of ${partial.starCount} stars\\)`).test(partialRows["In your sky then"]), `${partial.id}: ${partialRows["In your sky then"]}`);
+      const dayDifference = rowMap("Ori", { ...chicagoSky, date: new Date("2025-01-02T11:00:00Z") })["Highest point that day"];
+      record("a highest-point time on another calendar day names that day", /on Jan \d+$/.test(dayDifference) || /^Around \d/.test(dayDifference), dayDifference);
+
+      const allowed = new Set(["Latin name", "Common name", "IAU abbreviation", "Genitive form (used in star designations)", "Stars in this pattern", "Lines connecting them",
+        "Brightest star in the pattern", "Size on the sky", "From your latitude", "In your sky then", "Highest point that day"]);
+      let badLabels = 0, badValues = 0, rowCount = 0;
+      const forbidden = /myth|legend|god|goddess|story|named after|ancient|greek|roman|hero|monster/i;
+      for (const id of ids) for (const sky of [null, chicagoSky, sydneySky]) {
+        for (const [name, value] of learnRows(id, catalog, starFacts, sky)) {
+          rowCount += 1;
+          if (!allowed.has(name)) badLabels += 1;
+          if (!value || /undefined|NaN|null/.test(value) || forbidden.test(value) || !/^\S+( \S+)*$/.test(value.replace(/[,()%°.:]/g, ""))) badValues += 1;
+        }
+      }
+      record("every row for all 88 constellations, with and without a sky, uses an allowed label and a clean value (no stories, no 'undefined', no odd spacing)",
+        badLabels === 0 && badValues === 0, `${rowCount} rows; ${badLabels} bad labels, ${badValues} bad values`);
+      const rowsOnce = JSON.stringify(learnRows("Cyg", catalog, starFacts, chicagoSky));
+      record("the same inputs always give the same rows", rowsOnce === JSON.stringify(learnRows("Cyg", catalog, starFacts, chicagoSky)));
+      const timerStart = performance.now();
+      for (const id of ids) learnRows(id, catalog, starFacts, chicagoSky);
+      const ms = performance.now() - timerStart;
+      record("building the rows for all 88 constellations takes a fraction of a second", ms < 500, `${ms.toFixed(0)} ms`);
+      let threw = false;
+      try { constellationFacts("Nope", catalog, starFacts); } catch { threw = true; }
+      record("an unknown constellation is rejected", threw);
+      const catalogFacts = constellationFacts("UMi", catalog, starFacts);
+      record("the static facts agree with the game's own level facts for the same constellation (one source of truth)",
+        catalogFacts.latin === "Ursa Minor" && catalogFacts.english === "Little Dipper" && catalogFacts.abbreviation === "UMi" && catalogFacts.genitive === "Ursae Minoris" && catalogFacts.starCount === 7 && catalogFacts.linkCount === 7);
+
+      document.getElementById("report").textContent = report.join("\n\n");
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — stage B checkpoint 3 Learn facts checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

@@ -34,8 +34,25 @@ export async function loadCatalog(path = CATALOG_PATH) {
     fetch(`${path}constellations.json`).then((response) => response.json()),
   ]);
   const lines = new Map(linesFile.features.map((feature) => [feature.id, feature.geometry.coordinates]));
-  const info = new Map(infoFile.features.map((feature) => [feature.id, feature.properties]));
+  const info = new Map(infoFile.features.map((feature) => [feature.id, { ...feature.properties }]));
+  applyKnownCorrections(info);
   return { lines, info };
+}
+
+// Errors found in the vendored catalog. Each is applied only while the catalog still has the wrong value,
+// so fixing the data upstream later makes it a harmless no-op. tests/learn-facts.html scans for more.
+export const KNOWN_CATALOG_ERRORS = Object.freeze([
+  Object.freeze({
+    id: "Cru", field: "gen", wrong: "Crux", right: "Crucis",
+    reason: "The genitive of Crux is Crucis (as in Alpha Crucis, Acrux); the catalog repeats the nominative.",
+  }),
+]);
+
+function applyKnownCorrections(info) {
+  for (const { id, field, wrong, right } of KNOWN_CATALOG_ERRORS) {
+    const properties = info.get(id);
+    if (properties && properties[field] === wrong) properties[field] = right;
+  }
 }
 
 // Small deterministic generator (mulberry32) seeded from the constellation id.
