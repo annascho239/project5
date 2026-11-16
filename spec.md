@@ -8,6 +8,23 @@ Phase 2 proves **Inner Orbit** as a browser-based memory wallpaper maker for iPh
 
 The result is an astronomical interpretation, not a photograph. It does not recreate weather, terrain, buildings, light pollution, or exact naked-eye visibility.
 
+## Phase 3 addition: constellation launcher (planned; not yet built)
+
+A player aims and launches a ball from the bottom of a portrait board. The ball moves at constant speed with no gravity, bounces off the side walls, the top, and the pegs, and bounces off the stars too. A launch ends when the ball leaves the bottom, after 8 bounces, or after 20 seconds. A ball touching a constellation's star lights it once. When every star is lit the constellation is filled and the player sees catalog facts. The score is the number of launches; fewer is better.
+
+Acceptance checks (to be tested as built):
+
+1. Each level is a real constellation from the vendored catalog (about 5–9 stars), drawn in its real relative arrangement, with every star inside the board and large enough to hit.
+2. Bumper pegs are visibly distinct from stars, are placed deterministically, and never overlap a star.
+3. The same level, aim, and launch always produce the same path and result.
+4. Lighting a star is idempotent; the level is won only when every star is lit (never a level with no stars); each launch increments the count exactly once; a launch is spent after 8 bounces.
+5. The facts shown on winning come only from catalog data (name, IAU abbreviation, Latin and genitive names, star count).
+6. The game works by touch and by keyboard (arrow keys to aim, Space to launch); stars lit, launch count, and results are available as text; a reduced-motion option shows a launch's outcome without animation.
+7. The game makes no network request and stores no personal data.
+8. Mood choices from the wallpaper maker do not apply to the game.
+
+This changes the pitch's wallpaper-maker framing; see `plan.md` for the approval boundary.
+
 ## Current behavior and acceptance checks
 
 ### Memory and place

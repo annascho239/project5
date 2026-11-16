@@ -5,10 +5,44 @@
 ## Five-week map
 
 - **Phase 1 — Ideate and pitch (complete):** Approve the original Inner Orbit concept, scope, title, and visual direction.
-- **Phase 2 — Prove the core (current):** Prove memory details → resolved place-local time → real all-sky constellation map → 1179 × 2556 PNG.
-- **Phase 3 — Revise and expand:** Respond to milestone/device evidence, refine the flow and composition, and resolve the pitch/spec change with the Studio director.
+- **Phase 2 — Prove the core (built and device-tested; director approval and cleanup pending):** Prove memory details → resolved place-local time → real all-sky constellation map → 1179 × 2556 PNG.
+- **Phase 3 — Revise and expand (current):** Turn the project into a constellation launcher game (see below); resolve the pitch/spec changes with the Studio director.
 - **Phase 4 — Polish and peer test:** Improve hierarchy and error paths, test accessibility and representative memories, and publish a stable review version.
 - **Phase 5 — Finish and showcase:** Revise from testing, verify the public build/download, complete documentation and credits, and prepare the demonstration.
+
+## Phase 3 — Constellation launcher game (Developer direction, November 16, 2026; checkpoints awaiting approval)
+
+Developer direction: make the project a game. After two earlier ideas (drawing a constellation, then tracing a target), the Developer chose a **bubble-shooter-style launcher**: the player aims a ball from the bottom of a portrait screen; it moves at constant speed with no gravity, bounces off the side walls, top, and pegs, and ends when it leaves the bottom. Touching a constellation's star lights it. When every star is lit the constellation is "filled" and the player sees its catalog facts. The goal is the fewest launches.
+
+Decisions from the planning dialogue:
+- Levels are **fixed constellations**; the memory place/date/time and the wallpaper export are **out of the game for now** (the code stays in the repo, unlinked and untouched).
+- Stars are large glowing targets at their real relative positions, plus a few clearly styled **bumper pegs** that keep the ball moving.
+- Learning content is **catalog facts only** (name, IAU abbreviation, Latin/genitive names, star count). No outside facts.
+- **Three levels**, easy to harder, about 5–9 stars each. Score is launch count; the target score is set after playtesting.
+- Built as **new files on a separate page**; the wallpaper maker is not changed until the Developer decides.
+
+**Approval boundary.** This replaces the pitch's core and the real-sky change that the Studio director has not yet answered. `pitch.md` stays unchanged. Both changes go to the director as one request; the Agent recommends sending it before most of the build is done.
+
+### Proposed checkpoints (not started)
+
+1. **Levels.** Pick three constellations from the vendored catalog and project each to board coordinates with a small local projection. Place bumpers deterministically. Tests: stars inside the board and separated, bumpers never on stars, shapes match the catalog.
+   **Status (Nov 16, 2026): implemented and Agent-tested.** `game-levels.js` builds Cassiopeia (5 stars, 8 bumpers), Ursa Minor/Little Dipper (7 stars, 10 bumpers), and Cygnus (9 stars, 12 bumpers) from the vendored catalog. `tests/game-levels.html` (headless Chrome) passed all 33 checks: star and link counts match the catalog; board distances correlate 1.000 with true angular separations; the pattern is not mirrored (checked from raw coordinates); the closest star pair is 80.7, 59.7, and 32.8 units against a 32-unit minimum; bumpers keep their clearances; the build is deterministic; facts come only from the catalog. An early orientation check failed for Ursa Minor because it sits at the celestial pole where right ascension is not a left-right distance; the check was replaced with angular-separation and handedness checks. The Swan's stars are the tightest at 32.8 units, so Level 3 may need tuning once the ball physics exists. Board numbers (360 × 640 units, star radius 14, ball radius 7) are provisional until play-testing.
+2. **Physics rules, no interface.** Fixed-timestep deterministic ball, wall and peg bounces, star lighting, launch end, launch count, and win. Headless tests, including repeatability.
+   **Status (Nov 16, 2026): implemented and Agent-tested.** `game-physics.js` is a pure, deterministic fixed-step engine (120 steps/s, speed 420 units/s, no gravity or energy loss): wall, peg, and star bounces; star lighting once; launch count; win; and three ways a launch ends (exits the bottom, spent after the bounce limit, or a 20-second timeout). `tests/game-physics.html` (headless Chrome) passed all 28 checks, including constant speed, no overlap or wall escape across 29 aims per level (deepest contact 0.000 units on two levels, 0.082 on the Swan, within a documented 0.25-unit tolerance), identical results for repeated shots, and a scripted player clearing level 1 through the public rules.
+   - **Found and fixed:** a level with no stars counted as instantly won (vacuous truth). Two test expectations of mine were wrong (a head-on bumper hit reverses once, not twice).
+   - **Design decision (Developer, Nov 16): a launch is spent after 8 bounces.** Measured by sweeping 281 aims per level: with no limit, 38% or fewer of aims light nothing but a perfect shot can clear a level; at 8 bounces the best single shot lights 4, 4, and 5 stars and an expert needs 2 to 3 launches. Greedy set-cover estimates are 2, 3, 3 launches at 0.5° aim resolution and 2, 2, 2 at 0.25°, so they are expert lower bounds, not targets. The target score will be set from play-testing.
+   - **Provisional:** stars are solid and bounce the ball like pegs (`PHYSICS.starsBounce`); speed, step, bounce limit, and board sizes will be tuned in play-testing.
+3. **Play screen.** New page with canvas, drag-to-aim and release-to-launch, arrow keys and Space, status text, reset, and an instant-result option for reduced motion.
+   **Status (Nov 16, 2026): implemented and Agent-tested.** `play.html`, `game.css`, and `game.js` add a separate play page (the wallpaper maker is untouched and not linked). Features: portrait board that keeps its 9:16 shape and fits a 390 × 844 view without scrolling; drag-and-release aiming; arrow keys (1° steps, Shift for 5°) and Space; Launch and Reset buttons; three level choices; HUD with stars lit and launches; text status and a screen-reader star list; and an "instant result" option that defaults on when the system asks for reduced motion. `tests/game-play.html` passed all 22 checks in **real-time** headless Chrome (60 frames a second): instant results match the rules module for the same aim, an animated launch ends in the same state as the rules, a second launch is refused mid-flight, a scripted player clears level 1 in 2 launches through the screen, and the page makes no request outside its own files. The reduced-motion default was checked with the system preference both off and on.
+   - **Found and fixed:** the catalog writes "Little Dipper" with a typographic space (U+2005); names are now normalized and a level test guards it. "2 launchs" pluralization bug fixed. Header wrapping and focus-ring overlap tidied.
+   - **Test-method note:** the virtual-time runner used earlier cannot test animation (its timers run ahead of `requestAnimationFrame`, about 2 frames a second); animation checks use a real-time DevTools run instead.
+   - **Not yet done:** win panel with catalog facts, progression across levels, and session best (checkpoint 4); the Developer's iPhone play-test; touch feel and aim precision are unproven on a real device.
+4. **Win and progression.** Facts panel, three levels, session best, restart.
+5. **Desktop verification.** Collision and scoring tests, keyboard flow, screenshots.
+6. **Developer iPhone 15 Pro test.** The Agent prepares it; only the Developer's observations can pass it.
+7. **Handoff.** One request to the Studio director covering both scope changes.
+
+Risks: aiming and tuning feel can take many iterations; sparse stars may make some levels very hard without enough bumpers; animation conflicts with the pitch's no-motion-required principle, so every outcome needs a text and instant alternative; the schedule for Phases 4 and 5 shrinks.
 
 ## Approved technical direction
 
