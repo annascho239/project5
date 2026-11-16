@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage B checkpoint 1 sky engine checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    #sky-map { position: absolute; left: -10000px; width: 900px; height: 900px; }
+    #celestial-form, #error { display: none !important; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+  <script src="../vendor/d3/d3.v3.5.17.min.js"></script>
+  <script src="../vendor/d3-celestial/celestial.min.js"></script>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <div id="sky-map"></div>
+
+  <script type="module">
+    import { loadCatalog } from "../game-levels.js";
+    import { compassName, centerOf, constellationStars, describePosition, greenwichSiderealDegrees, horizontalPosition, julianDate, visibleConstellations } from "../sky-engine.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
+    const angleDifference = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const chicago = { latitude: 41.85003, longitude: -87.65005 };
+      const sydney = { latitude: -33.86785, longitude: 151.20732 };
+      const chicagoJan = new Date("2025-01-02T03:00:00Z"); // 9:00 PM CST on Jan 1
+      const sydneyJan = new Date("2025-01-01T10:00:00Z"); // 9:00 PM AEDT on Jan 1
+
+      // ---- Published constants and physical properties ----
+      record("Julian date of the J2000 epoch is 2451545.0", julianDate(new Date("2000-01-01T12:00:00Z")) === 2451545.0);
+      const gmstJ2000 = greenwichSiderealDegrees(new Date("2000-01-01T12:00:00Z"));
+      record("sidereal time at J2000.0 matches the published 18h 41m 50.548s (280.4606°)", near(gmstJ2000, 280.46061837, 1e-6), gmstJ2000.toFixed(6) + "°");
+      const gmstMidnight = greenwichSiderealDegrees(new Date("2000-01-01T00:00:00Z"));
+      record("sidereal time at 0h UT on 1 Jan 2000 matches the Almanac's 6h 39m 52.27s (99.9678°)", near(gmstMidnight, (6 + 39 / 60 + 52.27 / 3600) * 15, 0.001), gmstMidnight.toFixed(4) + "°");
+
+      const polaris = [37.95, 89.2641];
+      let worstAltitude = 0, worstAzimuth = 0;
+      for (let hour = 0; hour < 24; hour += 2) {
+        const when = new Date(Date.UTC(2025, 0, 2, hour, 17));
+        const p = horizontalPosition(polaris[0], polaris[1], chicago, when);
+        worstAltitude = Math.max(worstAltitude, Math.abs(p.altitude - chicago.latitude));
+        worstAzimuth = Math.max(worstAzimuth, angleDifference(p.azimuth, 0));
+      }
+      record("Polaris stays within 1° of your latitude in height and within 3° of due north, all day", worstAltitude < 1 && worstAzimuth < 3,
+        `worst height error ${worstAltitude.toFixed(2)}°, worst direction error ${worstAzimuth.toFixed(2)}°`);
+
+      const lst = (greenwichSiderealDegrees(chicagoJan) + chicago.longitude + 360) % 360;
+      const onMeridian = horizontalPosition(lst, 0, chicago, chicagoJan);
+      record("a star on the equator crossing the meridian stands 90° minus your latitude high, due south",
+        near(onMeridian.altitude, 90 - chicago.latitude, 1e-9) && near(onMeridian.azimuth, 180, 1e-6), `${onMeridian.altitude.toFixed(3)}° high, azimuth ${onMeridian.azimuth.toFixed(3)}°`);
+      const overhead = horizontalPosition(lst, chicago.latitude, chicago, chicagoJan);
+      record("a star at your latitude on the meridian is at the zenith", near(overhead.altitude, 90, 1e-6), overhead.altitude.toFixed(6) + "°");
+      const rising = horizontalPosition(lst + 90, 0, chicago, chicagoJan);   // hour angle -6h
+      const setting = horizontalPosition(lst - 90, 0, chicago, chicagoJan);  // hour angle +6h
+      record("equatorial stars rise due east and set due west (so east is not mirrored)",
+        near(rising.altitude, 0, 1e-6) && near(rising.azimuth, 90, 1e-6) && near(setting.altitude, 0, 1e-6) && near(setting.azimuth, 270, 1e-6),
+        `rising az ${rising.azimuth.toFixed(2)}°, setting az ${setting.azimuth.toFixed(2)}°`);
+      const siderealDay = 23 * 3600e3 + 56 * 60e3 + 4.0905e3;
+      const star = [83.82, -5.39];
+      const a = horizontalPosition(star[0], star[1], chicago, chicagoJan);
+      const b = horizontalPosition(star[0], star[1], chicago, new Date(chicagoJan.getTime() + siderealDay));
+      record("a star returns to the same place after one sidereal day (23h 56m 4.09s)", near(a.altitude, b.altitude, 0.01) && angleDifference(a.azimuth, b.azimuth) < 0.01,
+        `height drift ${Math.abs(a.altitude - b.altitude).toExponential(1)}°`);
+      const c = horizontalPosition(star[0], star[1], chicago, new Date(chicagoJan.getTime() + 6 * 3600e3));
+      record("six hours later the sky has moved", Math.abs(a.altitude - c.altitude) > 10 || angleDifference(a.azimuth, c.azimuth) > 30);
+      record("compass names are right at the main points",
+        compassName(0) === "north" && compassName(45) === "northeast" && compassName(90) === "east" && compassName(180) === "south" &&
+        compassName(225) === "southwest" && compassName(270) === "west" && compassName(359) === "north" && compassName(-90) === "west");
+      const edge = [[90, -90, 0], [-90, 180, 0], [90, 0, 90], [-90, 0, -90], [0, 0, 0]].map(([lat, lon, dec]) => horizontalPosition(10, dec, { latitude: lat, longitude: lon }, chicagoJan));
+      record("the poles and the dateline give finite numbers", edge.every((p) => Number.isFinite(p.altitude) && Number.isFinite(p.azimuth) && p.azimuth >= 0 && p.azimuth < 360));
+
+      // ---- Known skies ----
+      const byId = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
+      const chicagoSky = visibleConstellations(catalog.lines, chicago, chicagoJan);
+      const sydneySky = visibleConstellations(catalog.lines, sydney, sydneyJan);
+      const ch = byId(chicagoSky), sy = byId(sydneySky);
+      record("Chicago, 9 PM Jan 1: Orion and Cassiopeia are up and the Southern Cross is not",
+        ch.Ori.status === "full" && ch.Cas.status === "full" && ch.Cru.status === "none", `Orion ${ch.Ori.status}, Cassiopeia ${ch.Cas.status}, Crux ${ch.Cru.status}`);
+      record("Orion stands in the south-east to south, well above the horizon, at that moment",
+        ch.Ori.center.altitude > 20 && ch.Ori.center.azimuth > 100 && ch.Ori.center.azimuth < 175, describePosition(ch.Ori.center));
+      record("Sydney, same local time: the Southern Cross is up and Cassiopeia is not",
+        sy.Cru.status === "full" && sy.Cas.status === "none", `Crux ${sy.Cru.status}, Cassiopeia ${sy.Cas.status}`);
+      const count = (sky, status) => sky.filter((x) => x.status === status).length;
+      record("the number of fully visible and partly visible constellations is stable (a regression check)",
+        count(chicagoSky, "full") === 29 && count(chicagoSky, "partial") === 10 && count(sydneySky, "full") === 46 && count(sydneySky, "partial") === 10,
+        `Chicago ${count(chicagoSky, "full")}+${count(chicagoSky, "partial")}, Sydney ${count(sydneySky, "full")}+${count(sydneySky, "partial")}`);
+      const julySky = visibleConstellations(catalog.lines, chicago, new Date("2025-07-02T03:00:00Z"));
+      const lateSky = visibleConstellations(catalog.lines, chicago, new Date("2025-01-02T09:00:00Z"));
+      const fullIds = (sky) => sky.filter((x) => x.status === "full").map((x) => x.id).sort().join();
+      record("a different season or hour gives a different list", fullIds(julySky) !== fullIds(chicagoSky) && fullIds(lateSky) !== fullIds(chicagoSky),
+        `Jan 9pm ${count(chicagoSky, "full")}, Jul 10pm ${count(julySky, "full")}, Jan 3am ${count(lateSky, "full")}`);
+      record("the same inputs always give the same list", JSON.stringify(visibleConstellations(catalog.lines, chicago, chicagoJan)) === JSON.stringify(chicagoSky));
+      record("every constellation is classified, with a finite centre", chicagoSky.length === catalog.lines.size && chicagoSky.every((x) => Number.isFinite(x.center.altitude) && ["full", "partial", "none"].includes(x.status)),
+        `${chicagoSky.length} of ${catalog.lines.size}`);
+      const wrapStars = [[350, 10], [10, 10]];
+      record("the pattern centre handles a constellation straddling 0° right ascension", near(((centerOf(wrapStars).rightAscension % 360) + 360) % 360, 0, 1e-9));
+      record("distinct stars are counted once even where lines share a point", constellationStars([[[1, 2], [3, 4]], [[3, 4], [5, 6]]]).length === 3);
+
+      // ---- Cross-check against d3-celestial's own sky (the one the wallpaper draws) ----
+      const WIDTH = 900;
+      Celestial.display({
+        container: "sky-map", width: WIDTH, projection: "stereographic", projectionRatio: 1, transform: "equatorial", follow: "zenith",
+        geopos: [0, 0], location: true, interactive: false, controls: false, form: false, disableAnimations: true,
+        datapath: "../vendor/d3-celestial/data/",
+        stars: { show: true, limit: 6, colors: false, style: { fill: "#fff", opacity: 1 }, size: 3, data: "stars.6.json" },
+        dsos: { show: false }, constellations: { names: false, lines: false, bounds: false }, mw: { show: false },
+        lines: { graticule: { show: false }, equatorial: { show: false }, ecliptic: { show: false }, galactic: { show: false }, supergalactic: { show: false } },
+        planets: { show: false }, background: { fill: "#000", opacity: 0, stroke: "#000", width: 0 }, horizon: { show: false }, daylight: { show: false },
+        formFields: { location: false, general: false, stars: false, dsos: false, constellations: false, lines: false, other: false, download: false },
+      });
+      await sleep(600);
+      const starFile = await (await fetch("../vendor/d3-celestial/data/stars.6.json")).json();
+      const stars = starFile.features.map((f) => f.geometry.coordinates);
+
+      const scenarios = [
+        { name: "Chicago, Jan 1 9 PM", observer: chicago, date: chicagoJan, offset: -360 },
+        { name: "Sydney, Jan 1 9 PM", observer: sydney, date: sydneyJan, offset: 660 },
+        { name: "Tromsø, midsummer midnight", observer: { latitude: 69.65, longitude: 18.96 }, date: new Date("2025-06-21T22:00:00Z"), offset: 120 },
+        { name: "Quito, 3 AM", observer: { latitude: -0.18, longitude: -78.47 }, date: new Date("2025-03-15T08:00:00Z"), offset: -300 },
+        { name: "Chicago, July 4 (daylight saving)", observer: chicago, date: new Date("2025-07-05T02:00:00Z"), offset: -300 },
+        { name: "Chicago, 1950", observer: chicago, date: new Date("1950-07-04T04:00:00Z"), offset: -300 },
+        { name: "Kolkata", observer: { latitude: 22.57, longitude: 88.36 }, date: new Date("2025-11-16T16:30:00Z"), offset: 330 },
+      ];
+      for (const scenario of scenarios) {
+        // d3-celestial expects the browser's own current UTC offset here, not the place's (see app.js).
+        Celestial.skyview({ date: scenario.date, location: [scenario.observer.latitude, scenario.observer.longitude], timezone: -new Date().getTimezoneOffset() });
+        await sleep(1500); // let d3-celestial finish re-rotating to the new place and time
+        const canvas = document.querySelector("#sky-map canvas");
+        const center = canvas.width / 2;
+
+        const zenith = Celestial.zenith();
+        const wantedZenithRa = (greenwichSiderealDegrees(scenario.date) + scenario.observer.longitude + 360) % 360;
+        const zenithError = Math.max(angleDifference(zenith[0] + 360, wantedZenithRa), Math.abs(zenith[1] - scenario.observer.latitude));
+        record(`${scenario.name}: d3-celestial's zenith is the true zenith (right ascension and declination)`, zenithError < 0.02, `error ${zenithError.toFixed(4)}° (zenith RA ${((zenith[0] + 360) % 360).toFixed(2)}° vs ${wantedZenithRa.toFixed(2)}°)`);
+
+        const rows = [];
+        for (const [ra, dec] of stars) {
+          const mine = horizontalPosition(ra, dec, scenario.observer, scenario.date);
+          if (mine.altitude < 5) continue;                         // fit only well above the horizon
+          const point = Celestial.mapProjection([ra, dec]);
+          const dx = point[0] - center, dy = point[1] - center;
+          rows.push({ mine, radius: Math.hypot(dx, dy), angle: Math.atan2(dy, dx) });
+        }
+        // Stereographic: radius = 2R·tan(zenith distance / 2). Fit R from my altitudes, then see how well it holds.
+        let numerator = 0, denominator = 0;
+        for (const row of rows) { const t = Math.tan(((90 - row.mine.altitude) * Math.PI) / 360); numerator += row.radius * t; denominator += 2 * t * t; }
+        const R = numerator / denominator;
+        const residuals = rows.map((row) => Math.abs(row.radius - 2 * R * Math.tan(((90 - row.mine.altitude) * Math.PI) / 360)));
+        const rms = Math.sqrt(residuals.reduce((s, v) => s + v * v, 0) / residuals.length);
+        record(`${scenario.name}: heights agree with d3-celestial's sky (${rows.length} stars; fitted map scale ${(R / (WIDTH / 4)).toFixed(3)}× the expected)`,
+          rms < 0.6 && near(R / (WIDTH / 4), 1, 0.03), `rms difference ${rms.toFixed(3)} px on a ${WIDTH}px map, largest ${Math.max(...residuals).toFixed(2)} px`);
+
+        // Direction: the drawn angle must equal my azimuth up to one constant rotation (and possibly one mirror)
+        const resultant = (sign) => {
+          let sx = 0, sy = 0;
+          for (const row of rows) { const phase = row.angle - sign * (row.mine.azimuth * Math.PI) / 180; sx += Math.cos(phase); sy += Math.sin(phase); }
+          return Math.hypot(sx, sy) / rows.length;
+        };
+        const aligned = Math.max(resultant(1), resultant(-1));
+        record(`${scenario.name}: compass directions agree with d3-celestial's orientation`, aligned > 0.9995,
+          `alignment ${aligned.toFixed(5)} (${resultant(1) > resultant(-1) ? "same sense" : "mirrored sense"} as the map's angle)`);
+
+        let mismatches = 0, checked = 0;
+        for (const [ra, dec] of stars) {
+          const mine = horizontalPosition(ra, dec, scenario.observer, scenario.date);
+          if (Math.abs(mine.altitude) < 0.4) continue;           // too close to the horizon to call
+          const point = Celestial.mapProjection([ra, dec]);
+          const theirs = Math.hypot(point[0] - center, point[1] - center) < 2 * R; // inside the horizon circle (radius 2R)
+          checked += 1;
+          if ((mine.altitude > 0) !== theirs) mismatches += 1;
+        }
+        record(`${scenario.name}: every star is on the same side of the horizon as in d3-celestial's sky`, mismatches === 0, `${mismatches} disagreements among ${checked} stars`);
+      }
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — stage B checkpoint 1 sky engine checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>
