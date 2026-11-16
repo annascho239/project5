@@ -341,3 +341,17 @@ h1 {
 .win-actions [hidden] {
   display: none;
 }
+
+.top-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--violet-bright);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.top-nav a:hover {
+  text-decoration: underline;
+}

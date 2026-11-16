@@ -2,175 +2,57 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#090b24">
-    <title>Inner Orbit — Memory sky wallpaper maker</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="vendor/d3/d3.v3.5.17.min.js"></script>
-    <script src="vendor/d3-celestial/celestial.min.js"></script>
-    <script src="vendor/luxon.min.js"></script>
-    <script src="app.js" defer></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#07081a">
+    <title>Inner Orbit — Star Launcher and Memory Sky</title>
+    <link rel="stylesheet" href="home.css">
   </head>
-  <body data-mood="calm">
-    <header class="site-header">
-      <a class="brand" href="#main-content" aria-label="Inner Orbit home">
-        <span class="brand-mark" aria-hidden="true">
-          <span class="brand-star">✦</span>
-        </span>
-        <span>Inner Orbit</span>
-      </a>
-      <p class="phase-label">Phase 2 prototype</p>
-    </header>
+  <body>
+    <main class="home">
+      <header class="home-header">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <p class="brand">Inner Orbit</p>
+      </header>
 
-    <main id="main-content" class="app-shell">
-      <section class="intro" aria-labelledby="page-title">
-        <p class="eyebrow">The sky above a moment that mattered</p>
-        <h1 id="page-title">Turn a memory into its night sky.</h1>
-        <p class="intro-copy">
-          Name a memory, tell us where and when it happened, and see the real
-          constellations above that place at that moment. Then make it an iPhone wallpaper.
-        </p>
-        <p class="privacy-note">
-          <span aria-hidden="true">●</span> Only the place you search for is sent to Open-Meteo. Everything else stays in this browser.
+      <section class="intro" aria-labelledby="home-title">
+        <p class="eyebrow">Real constellations, made playable</p>
+        <h1 id="home-title">Pick something to try.</h1>
+        <p class="lede">
+          Two small prototypes built on real star and constellation data. Both run in your browser, and neither needs an account.
         </p>
       </section>
 
-      <div class="workspace">
-        <section class="panel creator-panel" aria-labelledby="creator-title">
-          <div class="section-heading">
-            <div>
-              <p class="step-label">Step 1</p>
-              <h2 id="creator-title">Describe the memory</h2>
-            </div>
-          </div>
-
-          <form id="memory-form" novalidate>
-            <div class="field">
-              <label for="memory-title">Memory title</label>
-              <input id="memory-title" name="memory-title" type="text" maxlength="60"
-                autocomplete="off" placeholder="e.g. Our first night in Chicago"
-                aria-describedby="memory-title-error" required>
-              <p id="memory-title-error" class="field-error"></p>
-            </div>
-
-            <div class="field">
-              <label for="place-query">Place</label>
-              <div class="place-row">
-                <input id="place-query" name="place-query" type="text" maxlength="80"
-                  autocomplete="off" placeholder="City or town, e.g. Chicago"
-                  aria-describedby="place-help place-error" required>
-                <button id="place-search" class="button button-secondary" type="button">Find place</button>
-              </div>
-              <p id="place-help" class="field-help">
-                “Find place” sends only this text to the Open-Meteo Geocoding API. Choose a result to confirm the location and its time zone.
-              </p>
-              <p id="place-status" class="status-message" role="status" aria-live="polite"></p>
-              <p id="place-error" class="field-error"></p>
-            </div>
-
-            <fieldset id="place-results" class="choice-fieldset" hidden>
-              <legend>Choose the place you meant</legend>
-              <div id="place-options" class="choice-list"></div>
-            </fieldset>
-
-            <div class="datetime-row">
-              <div class="field">
-                <label for="local-date">Date</label>
-                <input id="local-date" name="local-date" type="date" min="1900-01-01" max="2100-12-31"
-                  aria-describedby="local-date-error" required>
-                <p id="local-date-error" class="field-error"></p>
-              </div>
-              <div class="field">
-                <label for="local-time">Approximate local time</label>
-                <input id="local-time" name="local-time" type="time"
-                  aria-describedby="local-time-help local-time-error" required>
-                <p id="local-time-error" class="field-error"></p>
-              </div>
-            </div>
-            <p id="local-time-help" class="field-help">
-              Use the clock time at the place, not your phone’s time zone.
-            </p>
-
-            <fieldset id="time-choice" class="choice-fieldset" hidden>
-              <legend>That clock time happened twice</legend>
-              <p id="time-choice-help" class="field-help">Clocks moved back that day. Choose which one you remember.</p>
-              <div id="time-choice-options" class="choice-list"></div>
-            </fieldset>
-
-            <fieldset class="mood-fieldset">
-              <legend>
-                <span class="step-label">Step 2</span>
-                Choose the atmosphere
-              </legend>
-              <div class="mood-options">
-                <label class="mood-card">
-                  <input type="radio" name="mood" value="calm" checked>
-                  <span class="mood-visual calm-visual" aria-hidden="true"></span>
-                  <span class="mood-copy">
-                    <strong>Calm</strong>
-                    <small>Soft glow · deep blue</small>
-                  </span>
-                </label>
-
-                <label class="mood-card">
-                  <input type="radio" name="mood" value="energized">
-                  <span class="mood-visual energized-visual" aria-hidden="true"></span>
-                  <span class="mood-copy">
-                    <strong>Energized</strong>
-                    <small>Bright pulse · warm coral</small>
-                  </span>
-                </label>
-              </div>
-            </fieldset>
-
-            <button id="submit-button" class="button button-primary" type="submit">
-              Create iPhone wallpaper
-              <span aria-hidden="true">↗</span>
-            </button>
-          </form>
-        </section>
-
-        <section class="panel preview-panel" aria-labelledby="preview-title">
-          <div class="section-heading preview-heading">
-            <div>
-              <p class="step-label">Live preview</p>
-              <h2 id="preview-title">Your memory sky</h2>
-            </div>
-            <span class="device-label">iPhone 15 Pro</span>
-          </div>
-
-          <div class="phone-stage">
-            <div class="phone-frame" data-ready="false">
-              <div class="dynamic-island"></div>
-              <canvas id="preview-canvas" role="img" aria-label="Wallpaper preview appears after you choose a place, date, and time.">
-                Wallpaper preview. The text summary below describes the current design.
-              </canvas>
-              <p id="sky-placeholder" class="sky-placeholder">Choose a place, date, and time to reveal the sky.</p>
-              <div class="lock-screen-overlay" aria-hidden="true">
-                <p class="lock-date">Sunday, November 9</p>
-                <p class="lock-time">9:41</p>
-              </div>
-            </div>
-          </div>
-          <!-- d3-celestial draws here off-screen; the composition canvas is the visible output. -->
-          <div id="sky-map" aria-hidden="true"></div>
-
-          <p id="result-summary" class="result-summary">
-            No memory sky yet. Add a title, place, date, and time.
+      <ul class="cards">
+        <li class="card">
+          <p class="tag">New · prototype</p>
+          <h2>Star Launcher</h2>
+          <p>
+            Aim a ball through a real constellation and light every star in as few launches as you can.
+            Fill a constellation to learn about it.
           </p>
-          <p id="app-status" class="status-message" role="status" aria-live="polite"></p>
-        </section>
-      </div>
-    </main>
+          <a class="card-link card-link-primary" href="play.html">Play Star Launcher <span aria-hidden="true">→</span></a>
+        </li>
 
-    <footer>
-      <p>
-        Place search by <a href="https://open-meteo.com/en/docs/geocoding-api">Open-Meteo Geocoding</a>
-        (data from <a href="https://www.geonames.org/">GeoNames</a>, CC BY 4.0).
-        Sky drawn with d3-celestial; star and constellation data credits are in
-        <a href="vendor/THIRD_PARTY.md">vendor/THIRD_PARTY.md</a>.
-        The map is an astronomical interpretation, not a photograph.
-      </p>
-    </footer>
+        <li class="card">
+          <p class="tag">Earlier prototype</p>
+          <h2>Memory Sky Wallpaper</h2>
+          <p>
+            Pick a place, a date, and a time to see the real sky above that moment, then save it as an iPhone wallpaper.
+          </p>
+          <a class="card-link" href="wallpaper.html">Open Memory Sky Wallpaper <span aria-hidden="true">→</span></a>
+        </li>
+      </ul>
+
+      <footer class="home-footer">
+        <p>
+          <strong>Privacy:</strong> Star Launcher makes no network requests beyond this site's own files.
+          Memory Sky Wallpaper sends only the place name you search for to Open-Meteo; your title, date, and time stay in your browser.
+        </p>
+        <p>
+          Star and constellation data come from d3-celestial. Credits and licenses are in
+          <a href="vendor/THIRD_PARTY.md">vendor/THIRD_PARTY.md</a>.
+        </p>
+      </footer>
+    </main>
   </body>
 </html>

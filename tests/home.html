@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Front page checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="phone" src="../index.html?p=1" width="390" height="844" title="Front page, phone width"></iframe>
+  <iframe id="wide" src="../index.html?p=2" width="1100" height="700" title="Front page, wide"></iframe>
+
+  <script>
+    (async function () {
+      "use strict";
+      var checks = document.getElementById("checks");
+      var allPassed = true;
+      function record(label, passed, detail) {
+        allPassed = allPassed && passed;
+        var item = document.createElement("li");
+        item.dataset.pass = String(passed);
+        item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+        checks.appendChild(item);
+      }
+      function sleep(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+      async function ready(frame) {
+        for (var i = 0; i < 100; i += 1) {
+          var d = frame.contentDocument;
+          if (d && d.querySelector("h1")) return d;
+          await sleep(100);
+        }
+        throw new Error("front page did not load");
+      }
+      async function fetchDoc(path) {
+        var response = await fetch(path);
+        var html = await response.text();
+        return { status: response.status, doc: new DOMParser().parseFromString(html, "text/html") };
+      }
+
+      try {
+        var phone = document.getElementById("phone");
+        var doc = await ready(phone);
+        var win = phone.contentWindow;
+        await sleep(200);
+
+        record("the front page has a heading and exactly two project cards",
+          doc.querySelector("h1").textContent.trim().length > 0 && doc.querySelectorAll(".card").length === 2,
+          doc.querySelector("h1").textContent.trim());
+
+        var links = [].slice.call(doc.querySelectorAll(".card-link"));
+        record("the two links go to the game and the wallpaper maker",
+          links.length === 2 && links[0].getAttribute("href") === "play.html" && links[1].getAttribute("href") === "wallpaper.html",
+          links.map(function (a) { return a.getAttribute("href"); }).join(", "));
+        record("link names are specific and different (not 'click here')",
+          /Star Launcher/.test(links[0].textContent) && /Memory Sky Wallpaper/.test(links[1].textContent) && links[0].textContent !== links[1].textContent,
+          links.map(function (a) { return a.textContent.replace(/\s+/g, " ").trim(); }).join(" | "));
+        record("links are at least 44px tall for touch",
+          links.every(function (a) { return a.getBoundingClientRect().height >= 44; }),
+          links.map(function (a) { return Math.round(a.getBoundingClientRect().height); }).join(", ") + " px");
+        record("no horizontal overflow at phone width", doc.documentElement.scrollWidth <= win.innerWidth, "scrollWidth " + doc.documentElement.scrollWidth + " in " + win.innerWidth);
+        record("all links are relative so the site works under /project5/ on GitHub Pages",
+          [].slice.call(doc.querySelectorAll("a[href]")).every(function (a) { return !/^(\/|https?:)/.test(a.getAttribute("href")); }),
+          [].slice.call(doc.querySelectorAll("a[href]")).map(function (a) { return a.getAttribute("href"); }).join(", "));
+
+        var wideDoc = await ready(document.getElementById("wide"));
+        await sleep(200);
+        var cards = [].slice.call(wideDoc.querySelectorAll(".card")).map(function (c) { return c.getBoundingClientRect(); });
+        record("on a wide screen the cards sit side by side", cards.length === 2 && cards[0].right <= cards[1].left + 1 && Math.abs(cards[0].top - cards[1].top) < 2,
+          "left card ends at " + Math.round(cards[0].right) + ", right card starts at " + Math.round(cards[1].left));
+        var stacked = [].slice.call(doc.querySelectorAll(".card")).map(function (c) { return c.getBoundingClientRect(); });
+        record("on a phone the cards stack", stacked[1].top >= stacked[0].bottom - 1, "second card starts at " + Math.round(stacked[1].top));
+
+        record("the page loads only its own stylesheet and nothing external",
+          win.performance.getEntriesByType("resource").every(function (e) { return new URL(e.name).origin === win.location.origin; }) &&
+          doc.querySelectorAll("script").length === 0,
+          win.performance.getEntriesByType("resource").length + " resources, " + doc.querySelectorAll("script").length + " scripts");
+        record("the privacy note names the one request that leaves the browser",
+          /Open-Meteo/.test(doc.querySelector(".home-footer").textContent) && /no network requests/.test(doc.querySelector(".home-footer").textContent));
+
+        var play = await fetchDoc("../play.html");
+        var wallpaper = await fetchDoc("../wallpaper.html");
+        record("both destinations exist and are the right pages",
+          play.status === 200 && /Star Launcher/.test(play.doc.title) && wallpaper.status === 200 && /Memory sky wallpaper maker/.test(wallpaper.doc.title),
+          play.doc.title + " | " + wallpaper.doc.title);
+        record("each destination links back to the front page",
+          !!play.doc.querySelector('nav a[href="index.html"]') && !!wallpaper.doc.querySelector('a.brand[href="index.html"]'));
+        var credits = await fetch("../vendor/THIRD_PARTY.md");
+        record("the credits link resolves", credits.status === 200);
+
+        document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — front page checks";
+        document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+      } catch (error) {
+        record("harness error", false, error && error.stack || String(error));
+        document.getElementById("summary").textContent = "FAIL — harness error";
+        document.title = "DONE FAIL";
+      }
+    }());
+  </script>
+</body>
+</html>
