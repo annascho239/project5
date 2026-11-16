@@ -40,6 +40,14 @@ const elements = {
   levelOptions: document.querySelector("#level-options"),
   instantToggle: document.querySelector("#instant-toggle"),
   starList: document.querySelector("#star-list"),
+  winPanel: document.querySelector("#win-panel"),
+  winTitle: document.querySelector("#win-title"),
+  winSummary: document.querySelector("#win-summary"),
+  winBest: document.querySelector("#win-best"),
+  winFacts: document.querySelector("#win-facts"),
+  winOverall: document.querySelector("#win-overall"),
+  nextButton: document.querySelector("#next-button"),
+  againButton: document.querySelector("#again-button"),
 };
 
 const ui = {
@@ -52,6 +60,7 @@ const ui = {
   lastPath: [], // full path of the last instant launch
   pulses: [], // { index, start } glow effects on newly lit stars
   litBeforeLaunch: 0,
+  best: [], // fewest launches that filled each level this session; memory only, never stored
   animating: false,
   lastFrameTime: 0,
   accumulator: 0,
@@ -245,6 +254,82 @@ function finishLaunch(reason) {
   setStatus(describeEnd(reason, newlyLit), reason === "won" ? "win" : "");
   updateText();
   draw();
+  if (reason === "won") showWin();
+}
+
+/* ---------- Win panel, best scores, and progression ---------- */
+
+// Catalog facts only: nothing here comes from outside the vendored constellation data.
+function factRows(level) {
+  const { facts } = level;
+  const rows = [["Latin name", facts.latin]];
+  if (facts.english !== facts.latin) rows.push(["Common name", facts.english]);
+  rows.push(
+    ["IAU abbreviation", facts.abbreviation],
+    ["Genitive form (used in star designations)", facts.genitive],
+    ["Stars in this pattern", String(facts.starCount)],
+    ["Lines connecting them", String(facts.linkCount)],
+  );
+  return rows;
+}
+
+function levelCardDetail(index) {
+  const stars = plural(ui.levels[index].stars.length, "star");
+  const best = ui.best[index];
+  return best == null ? stars : `${stars} · filled in ${best}`;
+}
+
+function updateLevelCards() {
+  elements.levelOptions.querySelectorAll(".level-card small").forEach((small, index) => {
+    small.textContent = levelCardDetail(index);
+  });
+}
+
+function showWin() {
+  const { game, levelIndex } = ui;
+  const { launches } = progress(game);
+  const level = game.level;
+  const previous = ui.best[levelIndex];
+  const improved = previous == null || launches < previous;
+  if (improved) ui.best[levelIndex] = launches;
+
+  elements.winTitle.textContent = `${level.title} filled!`;
+  elements.winSummary.textContent = `You lit all ${plural(level.stars.length, "star")} in ${plural(launches, "launch", "launches")}.`;
+  elements.winBest.textContent =
+    previous == null
+      ? `Best this session: ${launches}.`
+      : improved
+        ? `New best! The previous best was ${previous}.`
+        : `Best this session: ${previous}.`;
+
+  elements.winFacts.replaceChildren(
+    ...factRows(level).flatMap(([name, value]) => {
+      const term = document.createElement("dt");
+      term.textContent = name;
+      const detail = document.createElement("dd");
+      detail.textContent = value;
+      return [term, detail];
+    }),
+  );
+
+  const allFilled = ui.levels.every((_, index) => ui.best[index] != null);
+  elements.winOverall.hidden = !allFilled;
+  if (allFilled) {
+    const total = ui.best.reduce((sum, value) => sum + value, 0);
+    elements.winOverall.textContent = `All ${ui.levels.length} constellations filled. Your best launches: ${ui.best.join(", ")} (${total} in all).`;
+  }
+
+  const isLast = levelIndex === ui.levels.length - 1;
+  elements.nextButton.hidden = isLast;
+  elements.winPanel.hidden = false;
+  updateLevelCards();
+  updateText();
+  elements.winTitle.focus({ preventScroll: true });
+  elements.winPanel.scrollIntoView({ block: "nearest" });
+}
+
+function hideWin() {
+  elements.winPanel.hidden = true;
 }
 
 function handleEvents(events, now) {
@@ -395,6 +480,7 @@ function selectLevel(index) {
   ui.trail = [];
   ui.lastPath = [];
   ui.pulses = [];
+  hideWin();
   setStatus("");
   updateText();
   draw();
@@ -408,11 +494,26 @@ function renderLevelOptions() {
       label.innerHTML = `
         <input type="radio" name="level" value="${index}"${index === 0 ? " checked" : ""}>
         <strong>${index + 1}. ${level.title}</strong>
-        <small>${level.stars.length} stars</small>`;
+        <small>${levelCardDetail(index)}</small>`;
       return label;
     }),
   );
 }
+
+elements.nextButton.addEventListener("click", () => {
+  const next = ui.levelIndex + 1;
+  if (next >= ui.levels.length) return;
+  const radio = elements.levelOptions.querySelectorAll('input[name="level"]')[next];
+  radio.checked = true;
+  selectLevel(next);
+  elements.canvas.focus({ preventScroll: true });
+});
+
+elements.againButton.addEventListener("click", () => {
+  selectLevel(ui.levelIndex);
+  setStatus("Playing again. Your best is kept for this session.");
+  elements.canvas.focus({ preventScroll: true });
+});
 
 elements.levelOptions.addEventListener("change", (event) => {
   if (!event.target.matches('input[name="level"]')) return;

@@ -36,6 +36,8 @@
     const $ = (selector) => doc.querySelector(selector);
     const text = (selector) => $(selector).textContent.trim();
     const canvas = () => $("#board");
+    // Only controls that are on screen (the win panel's buttons are hidden until a win).
+    const visibleControls = () => [...doc.querySelectorAll(".button, .level-card")].filter((el) => el.getBoundingClientRect().height > 0);
 
     function key(name, options = {}) {
       canvas().dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
@@ -98,8 +100,8 @@
       record("no horizontal overflow", doc.documentElement.scrollWidth <= win.innerWidth, `scrollWidth ${doc.documentElement.scrollWidth}`);
       record("controls have accessible names and are at least 44px tall",
         [...doc.querySelectorAll("button, .toggle input, .level-card")].every((el) => (el.textContent.trim() || (el.labels && el.labels.length) || el.getAttribute("aria-label")) && true) &&
-        [...doc.querySelectorAll(".button, .level-card")].every((el) => el.getBoundingClientRect().height >= 44),
-        [...doc.querySelectorAll(".button, .level-card")].map((el) => Math.round(el.getBoundingClientRect().height)).join(", "));
+        visibleControls().every((el) => el.getBoundingClientRect().height >= 44),
+        visibleControls().map((el) => Math.round(el.getBoundingClientRect().height)).join(", "));
       record("star states are available as text", doc.querySelectorAll("#star-list li").length === 5 && litList() === "00000");
 
       // Keyboard aiming

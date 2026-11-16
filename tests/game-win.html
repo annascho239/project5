@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game checkpoint 4 win and progression checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { width: 390px; height: 844px; border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" title="Star Launcher under test"></iframe>
+
+  <script type="module">
+    import { buildAllLevels, loadCatalog } from "../game-levels.js";
+    import { createGame, playShot } from "../game-physics.js";
+
+    const frame = document.getElementById("app");
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const deg = (d) => (d * Math.PI) / 180;
+
+    let win, doc;
+    const $ = (selector) => doc.querySelector(selector);
+    const text = (selector) => $(selector).textContent.trim().replace(/\s+/g, " ");
+    const canvas = () => $("#board");
+    const launches = () => Number(text("#launch-count"));
+    const panelShown = () => !$("#win-panel").hidden;
+
+    function key(name, options = {}) {
+      canvas().dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+    }
+    function readAimDegrees() {
+      const match = /Aim: (\d+)° (left|right)/.exec(text("#aim-readout"));
+      return match ? Number(match[1]) * (match[2] === "left" ? -1 : 1) : 0;
+    }
+    function shoot(aim) {
+      let guard = 0;
+      while (readAimDegrees() !== aim && guard < 200) {
+        const diff = aim - readAimDegrees();
+        key(diff > 0 ? "ArrowRight" : "ArrowLeft", { shiftKey: Math.abs(diff) >= 5 });
+        guard += 1;
+      }
+      key(" ");
+    }
+    async function load() {
+      frame.src = "../play.html?run=" + Math.random();
+      for (let i = 0; i < 150; i += 1) {
+        await sleep(100);
+        const d = frame.contentDocument;
+        if (d && d.querySelector("#level-options input")) break;
+      }
+      win = frame.contentWindow; doc = frame.contentDocument;
+      await sleep(200);
+      $("#instant-toggle").checked = true;
+    }
+    function chooseLevel(index) {
+      const radio = doc.querySelectorAll('input[name="level"]')[index];
+      radio.checked = true;
+      radio.dispatchEvent(new win.Event("change", { bubbles: true }));
+    }
+    const mask = (g) => g.lit.map((x) => (x ? 1 : 0)).join("");
+
+    // Aims (whole degrees) that clear a level using the rules module, starting from a given state.
+    function findPlan(level, setup = []) {
+      const sim = createGame(level);
+      setup.forEach((aim) => playShot(sim, deg(aim)));
+      const plan = [];
+      while (!sim.won && plan.length < 30) {
+        let best = null;
+        for (let d = -70; d <= 70; d += 1) {
+          const trial = createGame(level);
+          trial.lit = [...sim.lit];
+          playShot(trial, deg(d));
+          const gain = trial.lit.filter(Boolean).length - sim.lit.filter(Boolean).length;
+          if (!best || gain > best.gain) best = { d, gain };
+        }
+        if (best.gain <= 0) break;
+        plan.push(best.d);
+        playShot(sim, deg(best.d));
+      }
+      return { plan, won: sim.won };
+    }
+    // An aim that lights nothing on a fresh level: a wasted launch.
+    function findMiss(level) {
+      for (let d = -70; d <= 70; d += 1) {
+        const trial = createGame(level);
+        playShot(trial, deg(d));
+        if (!trial.lit.some(Boolean)) return d;
+      }
+      return null;
+    }
+    function factPairs() {
+      return [...doc.querySelectorAll("#win-facts dt")].map((dt) => [dt.textContent.trim(), dt.nextElementSibling.textContent.trim()]);
+    }
+    function expectedFacts(level) {
+      const f = level.facts;
+      const rows = [["Latin name", f.latin]];
+      if (f.english !== f.latin) rows.push(["Common name", f.english]);
+      rows.push(["IAU abbreviation", f.abbreviation], ["Genitive form (used in star designations)", f.genitive],
+        ["Stars in this pattern", String(f.starCount)], ["Lines connecting them", String(f.linkCount)]);
+      return rows;
+    }
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const levels = buildAllLevels(catalog);
+      const plans = levels.map((level) => findPlan(level));
+      record("the rules module can plan a clear of every level (setup for the screen tests)",
+        plans.every((p) => p.won), plans.map((p, i) => `${levels[i].title}: ${p.plan.length} launches`).join("; "));
+
+      await load();
+      const miss = findMiss(levels[0]);
+      record("setup: a wasted launch exists on level 1", miss !== null, `aim ${miss}°`);
+
+      // --- Level 1: first win, wasteful ---
+      shoot(miss);
+      const afterMiss = progressText();
+      function progressText() { return `${text("#stars-lit")}, launches ${launches()}`; }
+      record("a launch that lights nothing does not show the win panel", !panelShown() && /^0 of 5/.test(text("#stars-lit")), afterMiss);
+      for (const aim of plans[0].plan) shoot(aim);
+      const wastefulLaunches = plans[0].plan.length + 1;
+      record("winning shows the win panel with the title, summary, and launch count",
+        panelShown() && text("#win-title") === "Cassiopeia filled!" &&
+        text("#win-summary") === `You lit all 5 stars in ${wastefulLaunches} launches.` && launches() === wastefulLaunches,
+        text("#win-summary"));
+      record("focus moves to the panel heading and it is on screen",
+        doc.activeElement && doc.activeElement.id === "win-title" && $("#win-title").getBoundingClientRect().top >= 0 &&
+        $("#win-title").getBoundingClientRect().top < win.innerHeight, `active: ${doc.activeElement && doc.activeElement.id}`);
+      record("the facts are exactly the catalog's, as text",
+        JSON.stringify(factPairs()) === JSON.stringify(expectedFacts(levels[0])), JSON.stringify(factPairs()));
+      record("the first win sets the best and the level card shows it",
+        text("#win-best") === `Best this session: ${wastefulLaunches}.` &&
+        doc.querySelectorAll(".level-card small")[0].textContent === `5 stars · filled in ${wastefulLaunches}`, text("#win-best"));
+      record("the panel offers Next level and Play again (each at least 44px tall), and the launch button is off",
+        !$("#next-button").hidden && !$("#again-button").hidden && $("#launch-button").disabled &&
+        $("#next-button").getBoundingClientRect().height >= 44 && $("#again-button").getBoundingClientRect().height >= 44,
+        `${Math.round($("#next-button").getBoundingClientRect().height)}px, ${Math.round($("#again-button").getBoundingClientRect().height)}px`);
+      key(" ");
+      record("further launches after a win do nothing", launches() === wastefulLaunches);
+
+      // --- Replay for a new best ---
+      $("#again-button").click();
+      record("Play again clears the board, hides the panel, and returns focus to the board",
+        !panelShown() && launches() === 0 && text("#stars-lit") === "0 of 5" && doc.activeElement.id === "board");
+      for (const aim of plans[0].plan) shoot(aim);
+      const bestLaunches = plans[0].plan.length;
+      record("a better run reports a new best and updates the level card",
+        text("#win-best") === `New best! The previous best was ${wastefulLaunches}.` &&
+        doc.querySelectorAll(".level-card small")[0].textContent === `5 stars · filled in ${bestLaunches}`, text("#win-best"));
+
+      // --- A worse run keeps the best ---
+      $("#again-button").click();
+      shoot(miss);
+      for (const aim of plans[0].plan) shoot(aim);
+      record("a worse run keeps the best and does not claim a new one",
+        text("#win-best") === `Best this session: ${bestLaunches}.` && !/New best/.test(text("#win-best")), text("#win-best"));
+
+      // --- Reset keeps the best ---
+      $("#reset-button").click();
+      record("Reset level hides the panel but keeps the session best",
+        !panelShown() && doc.querySelectorAll(".level-card small")[0].textContent === `5 stars · filled in ${bestLaunches}`);
+
+      // --- Win again then Next level ---
+      for (const aim of plans[0].plan) shoot(aim);
+      $("#next-button").click();
+      record("Next level loads level 2 fresh with the panel hidden and focus on the board",
+        text("#game-title") === "Little Dipper" && launches() === 0 && !panelShown() && doc.activeElement.id === "board" &&
+        doc.querySelectorAll('input[name="level"]')[1].checked);
+
+      // --- Level 2 facts ---
+      for (const aim of plans[1].plan) shoot(aim);
+      record("level 2 shows its own facts, including the common name",
+        text("#win-title") === "Little Dipper filled!" && JSON.stringify(factPairs()) === JSON.stringify(expectedFacts(levels[1])) &&
+        factPairs()[1][0] === "Common name" && factPairs()[1][1] === "Little Dipper", JSON.stringify(factPairs().slice(0, 2)));
+      record("the overall message is not shown until every level is filled", $("#win-overall").hidden);
+
+      // --- Level 3 completes the set ---
+      $("#next-button").click();
+      for (const aim of plans[2].plan) shoot(aim);
+      const bests = [bestLaunches, plans[1].plan.length, plans[2].plan.length];
+      const total = bests.reduce((a, b) => a + b, 0);
+      record("the last level has no Next button, and the overall result is shown",
+        $("#next-button").hidden && !$("#win-overall").hidden &&
+        text("#win-overall") === `All 3 constellations filled. Your best launches: ${bests.join(", ")} (${total} in all).`, text("#win-overall"));
+      record("the last level shows its facts too", JSON.stringify(factPairs()) === JSON.stringify(expectedFacts(levels[2])), JSON.stringify(factPairs().slice(0, 2)));
+
+      // --- Choosing a level by hand hides the panel ---
+      chooseLevel(0);
+      record("choosing a level by hand hides the panel and loads that level fresh",
+        !panelShown() && text("#game-title") === "Cassiopeia" && launches() === 0);
+
+      // --- Memory only ---
+      const storage = { local: win.localStorage.length, session: win.sessionStorage.length, cookie: doc.cookie };
+      record("nothing is stored: no local or session storage, no cookies",
+        storage.local === 0 && storage.session === 0 && storage.cookie === "", JSON.stringify(storage));
+      const external = win.performance.getEntriesByType("resource").map((e) => new URL(e.name)).filter((u) => u.origin !== win.location.origin);
+      record("no request goes anywhere but the game's own files", external.length === 0, `${external.length} external`);
+      await load();
+      record("reloading the page forgets the session bests",
+        [...doc.querySelectorAll(".level-card small")].every((s) => !/filled in/.test(s.textContent)) && !panelShown());
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — game checkpoint 4 win and progression checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

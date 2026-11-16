@@ -273,3 +273,71 @@ h1 {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Win panel: shown under the board when every star is lit. */
+.win-panel {
+  display: grid;
+  gap: 0.6rem;
+  border: 1px solid #83e6c0;
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(16, 48, 40, 0.5);
+}
+
+.win-panel[hidden],
+.win-overall[hidden] {
+  display: none;
+}
+
+.win-panel h2 {
+  margin: 0;
+  color: #83e6c0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.win-summary,
+.win-best,
+.win-overall {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.win-best {
+  color: var(--violet-bright);
+  font-weight: 650;
+}
+
+.win-overall {
+  color: var(--muted);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem 0.9rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* Labels may wrap; values stay on one line so a name is never split mid-word. */
+.facts dt {
+  color: var(--faint);
+}
+
+.facts dd {
+  margin: 0;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.win-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.6rem;
+}
+
+.win-actions [hidden] {
+  display: none;
+}
