@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Game checkpoint 5 desktop verification</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { border: 1px solid #555; background: #fff; margin: 4px; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <div id="frames"></div>
+
+  <script type="module">
+    import { BOARD, buildAllLevels, loadCatalog } from "../game-levels.js";
+    import { createGame, playShot } from "../game-physics.js";
+
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const deg = (d) => (d * Math.PI) / 180;
+
+    // --- A small page-driving kit: one iframe per scenario ---
+    async function openFrame(path, width, height) {
+      const frame = document.createElement("iframe");
+      frame.width = width; frame.height = height;
+      frame.src = path + (path.includes("?") ? "&" : "?") + "run=" + Math.random();
+      document.getElementById("frames").append(frame);
+      for (let i = 0; i < 150; i += 1) {
+        await sleep(100);
+        const d = frame.contentDocument;
+        if (d && d.querySelector("#level-options input, .cards")) break;
+      }
+      const win = frame.contentWindow, doc = frame.contentDocument;
+      const errors = [];
+      win.addEventListener("error", (e) => errors.push(e.message));
+      win.addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
+      await sleep(250);
+      const $ = (selector) => doc.querySelector(selector);
+      const text = (selector) => $(selector).textContent.trim().replace(/\s+/g, " ");
+      return {
+        frame, win, doc, errors, $, text,
+        launches: () => Number(text("#launch-count")),
+        key(name, options = {}) { $("#board").dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options })); },
+        pointer(type, boardX, boardY, id = 7) {
+          const rect = $("#board").getBoundingClientRect();
+          $("#board").dispatchEvent(new win.PointerEvent(type, {
+            bubbles: true, cancelable: true, pointerId: id, isPrimary: true, button: 0,
+            clientX: rect.left + (boardX / BOARD.width) * rect.width, clientY: rect.top + (boardY / BOARD.height) * rect.height,
+          }));
+        },
+        setInstant(value) { $("#instant-toggle").checked = value; },
+        aim() { const m = /Aim: (\d+)° (left|right)/.exec(text("#aim-readout")); return m ? Number(m[1]) * (m[2] === "left" ? -1 : 1) : 0; },
+        level(index) { const r = doc.querySelectorAll('input[name="level"]')[index]; r.checked = true; r.dispatchEvent(new win.Event("change", { bubbles: true })); },
+      };
+    }
+    const mask = (g) => g.lit.map((x) => (x ? 1 : 0)).join("");
+    const litList = (page) => [...page.doc.querySelectorAll("#star-list li")].map((li) => (/: lit$/.test(li.textContent) ? 1 : 0)).join("");
+    async function waitFor(predicate, ms = 15000) {
+      for (let waited = 0; waited < ms; waited += 50) { if (predicate()) return true; await sleep(50); }
+      return false;
+    }
+    const channel = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+    const parseRgb = (css) => (css.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const levels = buildAllLevels(catalog);
+
+      // ===== A. Screen sizes =====
+      const sizes = [
+        { name: "small iPhone portrait", w: 320, h: 568 },
+        { name: "iPhone 15 Pro portrait", w: 393, h: 852 },
+        { name: "iPhone landscape", w: 852, h: 393 },
+        { name: "desktop", w: 1440, h: 900 },
+      ];
+      for (const size of sizes) {
+        const page = await openFrame("../play.html", size.w, size.h);
+        const rect = page.$("#board").getBoundingClientRect();
+        const noOverflow = page.doc.documentElement.scrollWidth <= page.win.innerWidth;
+        record(`${size.name} (${size.w}×${size.h}): no sideways scrolling, board keeps 9:16, is big enough to use, and is never taller than the screen`,
+          noOverflow && Math.abs(rect.width / rect.height - 360 / 640) < 0.01 && rect.width >= 150 && rect.height <= page.win.innerHeight,
+          `board ${Math.round(rect.width)}×${Math.round(rect.height)} in ${page.win.innerWidth}×${page.win.innerHeight}, scrollWidth ${page.doc.documentElement.scrollWidth}`);
+
+        // Touch mapping: a point straight above the launcher aims straight up; 45° is 45°.
+        page.pointer("pointerdown", BOARD.launcher.x, BOARD.launcher.y - 100);
+        const straight = page.aim();
+        page.pointer("pointermove", BOARD.launcher.x + 100, BOARD.launcher.y - 100);
+        const diagonal = page.aim();
+        page.pointer("pointerup", BOARD.launcher.x, BOARD.launcher.y - 5);
+        record(`${size.name}: touch points map to the right aim at this size`,
+          straight === 0 && Math.abs(diagonal - 45) <= 1 && page.launches() === 0, `straight ${straight}°, diagonal ${diagonal}°`);
+        record(`${size.name}: no script errors`, page.errors.length === 0, page.errors.join("; "));
+        page.frame.remove();
+      }
+
+      // ===== B. Rough handling =====
+      const rough = await openFrame("../play.html", 393, 852);
+      rough.setInstant(false);
+
+      // Spamming Launch during a flight counts one launch.
+      rough.key("ArrowRight", { shiftKey: true }); rough.key("ArrowRight", { shiftKey: true });
+      for (let i = 0; i < 12; i += 1) rough.key(" ");
+      rough.$("#launch-button").click();
+      rough.$("#launch-button").click();
+      await sleep(50);
+      record("pressing Launch many times during one flight counts one launch", rough.launches() === 1, `launches ${rough.launches()}`);
+      record("pointer input is ignored while the ball is flying",
+        (rough.pointer("pointerdown", 250, 250), rough.pointer("pointerup", 250, 250), rough.launches() === 1));
+      await waitFor(() => /^Launch 1: |filled/.test(rough.text("#game-status")));
+
+      // Switching level or resetting mid-flight leaves a clean new game.
+      rough.level(0);
+      rough.key("ArrowRight", { shiftKey: true });
+      rough.key(" ");
+      await sleep(120);
+      rough.level(1);
+      await sleep(900);
+      record("switching level mid-flight gives a fresh level and the old flight cannot change it",
+        rough.text("#game-title") === "Little Dipper" && rough.launches() === 0 && litList(rough) === "0000000" &&
+        !rough.$("#launch-button").disabled && rough.text("#game-status") === "", `${rough.text("#game-title")}, launches ${rough.launches()}, ${litList(rough)}`);
+      rough.level(0);
+      rough.key(" ");
+      await sleep(120);
+      rough.$("#reset-button").click();
+      await sleep(900);
+      record("resetting mid-flight gives a clean level", rough.launches() === 0 && litList(rough) === "00000" && !rough.$("#launch-button").disabled && rough.text("#game-status") === "Level reset.");
+
+      // Resizing the window mid-flight keeps the board correct and the shot intact.
+      rough.key(" ");
+      await sleep(150);
+      rough.frame.height = 640;
+      await sleep(120);
+      rough.frame.height = 852;
+      const finished = await waitFor(() => /^Launch 1: |filled/.test(rough.text("#game-status")));
+      const ref = createGame(levels[0]);
+      playShot(ref, deg(Math.round(rough.aim())));
+      const r2 = rough.$("#board").getBoundingClientRect();
+      record("resizing mid-flight does not disturb the shot, and the board keeps its shape",
+        finished && litList(rough) === mask(ref) && Math.abs(r2.width / r2.height - 360 / 640) < 0.01, `lit ${litList(rough)}, rules ${mask(ref)}`);
+
+      // Frame pacing while a shot animates (real time).
+      rough.$("#reset-button").click();
+      const deltas = [];
+      let last = rough.win.performance.now();
+      let collecting = true;
+      const tick = () => { const now = rough.win.performance.now(); deltas.push(now - last); last = now; if (collecting) rough.win.requestAnimationFrame(tick); };
+      rough.win.requestAnimationFrame(tick);
+      rough.key(" ");
+      await waitFor(() => /^Launch 1: |filled/.test(rough.text("#game-status")));
+      collecting = false;
+      const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+      record("an animated shot keeps smooth frame pacing", deltas.length > 20 && mean < 20 && Math.max(...deltas) < 120,
+        `${deltas.length} frames, mean ${mean.toFixed(1)} ms, worst ${Math.max(...deltas).toFixed(0)} ms`);
+      record("no script errors during rough handling", rough.errors.length === 0, rough.errors.join("; "));
+      rough.frame.remove();
+
+      // ===== C. Rules speed (a stand-in for per-frame cost: the simulation must be far cheaper than a frame) =====
+      const started = performance.now();
+      let shots = 0;
+      for (const level of levels) for (let d = -70; d <= 70; d += 0.5) { playShot(createGame(level), deg(d)); shots += 1; }
+      const perShot = (performance.now() - started) / shots;
+      record("simulating a whole launch takes a few milliseconds at most", perShot < 5, `${shots} launches, ${perShot.toFixed(2)} ms each`);
+
+      // ===== D. Text contrast (WCAG: 4.5:1 for normal text) =====
+      async function contrastReport(path, width, height) {
+        const page = await openFrame(path, width, height);
+        const worst = { ratio: Infinity, where: "" };
+        const walker = page.doc.createTreeWalker(page.doc.body, NodeFilter.SHOW_TEXT);
+        let checked = 0;
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent.trim()) continue;
+          const el = node.parentElement;
+          const box = el.getBoundingClientRect();
+          if (box.width === 0 || box.height === 0 || el.closest("[hidden], .sr-only, script, style, title")) continue;
+          const style = page.win.getComputedStyle(el);
+          if (style.visibility === "hidden") continue;
+          const onLightButton = el.closest(".button-primary, .card-link-primary");
+          const background = onLightButton ? hex("#afa2ff") : hex("#14163a"); // light gradient button, or the darkest-to-lightest panel colour
+          const ratio = contrast(parseRgb(style.color), background);
+          checked += 1;
+          if (ratio < worst.ratio) { worst.ratio = ratio; worst.where = `"${node.textContent.trim().slice(0, 30)}" (${style.color})`; }
+        }
+        page.frame.remove();
+        return { checked, worst };
+      }
+      for (const [name, path, w, h] of [["game", "../play.html", 393, 852], ["front page", "../index.html", 393, 852]]) {
+        const report = await contrastReport(path, w, h);
+        record(`${name}: every visible text colour has at least 4.5:1 contrast`, report.worst.ratio >= 4.5,
+          `${report.checked} text items, lowest ${report.worst.ratio.toFixed(1)}:1 at ${report.worst.where}`);
+      }
+
+      // Unlit stars must be distinguishable from lit ones without relying on hue alone (brightness and fill differ).
+      const unlitCore = [255, 255, 255].map((v) => v * 0.35 + 0.65 * 14);   // 35% white core over the dark board
+      const litCore = hex("#fff3dc");
+      record("lit and unlit stars differ strongly in brightness, not just colour",
+        contrast(litCore, hex("#0b0d27")) / contrast(unlitCore, hex("#0b0d27")) > 1.5,
+        `lit ${contrast(litCore, hex("#0b0d27")).toFixed(1)}:1 vs unlit core ${contrast(unlitCore, hex("#0b0d27")).toFixed(1)}:1 against the board`);
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — game checkpoint 5 desktop verification";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

@@ -103,13 +103,14 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-/* The board takes the height left over after the controls; the canvas keeps its 9:16 ratio. */
+/* The board is sized from the viewport only, never from the canvas bitmap, so redrawing cannot change
+   the layout. Height is the smaller of what fits the width (9:16) and about 72% of the screen height. */
 .board-wrap {
   display: flex;
-  flex: 1 1 auto;
+  flex: none;
   justify-content: center;
-  min-height: 18rem;
-  max-height: 70dvh;
+  height: min(calc((min(100vw, 30rem) - 1.5rem) * 16 / 9), max(18rem, 72vh));
+  height: min(calc((min(100vw, 30rem) - 1.5rem) * 16 / 9), max(18rem, 72dvh));
   padding-bottom: 0.25rem; /* room for the keyboard focus outline */
 }
 
