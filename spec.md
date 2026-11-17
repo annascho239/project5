@@ -38,6 +38,7 @@ Acceptance checks (to be tested as built):
 5. Changing the place, date, or time changes the list, and the list is the same for the same inputs.
 6. The wallpaper highlights exactly the constellations the player completed in that session.
 7. No memory text appears in a URL, storage, or any request; only the place search text leaves the browser.
+8. "Your sky" opens as a look-around map of the real sky for that place and moment, with a Map / List switch; the list holds exactly the constellations the map offers. Dragging looks around with the sky following the finger, zoom stops at its limits, and tapping a constellation's figure (within a fingertip's reach) selects it and offers Play (when playable) and Learn. East is on the left when facing south. The map's directions and heights agree with the sky engine and d3-celestial's sky. The map uses only stars and constellation figures, so it shows no Sun, Moon, planets, or daylight.
 
 ## Current behavior and acceptance checks
 
