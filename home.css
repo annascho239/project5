@@ -183,3 +183,9 @@ h2 {
 .home-footer a {
   color: var(--violet-bright);
 }
+
+@media (min-width: 40rem) {
+  .card-feature {
+    grid-column: 1 / -1;
+  }
+}

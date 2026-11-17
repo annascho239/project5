@@ -49,16 +49,16 @@
         var win = phone.contentWindow;
         await sleep(200);
 
-        record("the front page has a heading and exactly two project cards",
-          doc.querySelector("h1").textContent.trim().length > 0 && doc.querySelectorAll(".card").length === 2,
+        record("the front page has a heading and exactly three project cards",
+          doc.querySelector("h1").textContent.trim().length > 0 && doc.querySelectorAll(".card").length === 3,
           doc.querySelector("h1").textContent.trim());
 
         var links = [].slice.call(doc.querySelectorAll(".card-link"));
-        record("the two links go to the game and the wallpaper maker",
-          links.length === 2 && links[0].getAttribute("href") === "play.html" && links[1].getAttribute("href") === "wallpaper.html",
+        record("the three links go to the explore page, the game, and the wallpaper maker, with the explore page first",
+          links.length === 3 && links[0].getAttribute("href") === "explore.html" && links[1].getAttribute("href") === "play.html" && links[2].getAttribute("href") === "wallpaper.html",
           links.map(function (a) { return a.getAttribute("href"); }).join(", "));
         record("link names are specific and different (not 'click here')",
-          /Star Launcher/.test(links[0].textContent) && /Memory Sky Wallpaper/.test(links[1].textContent) && links[0].textContent !== links[1].textContent,
+          /Explore a memory sky/i.test(links[0].textContent) && /Star Launcher/.test(links[1].textContent) && /Memory Sky Wallpaper/.test(links[2].textContent) && new Set(links.map((a) => a.textContent)).size === 3,
           links.map(function (a) { return a.textContent.replace(/\s+/g, " ").trim(); }).join(" | "));
         record("links are at least 44px tall for touch",
           links.every(function (a) { return a.getBoundingClientRect().height >= 44; }),
@@ -71,10 +71,10 @@
         var wideDoc = await ready(document.getElementById("wide"));
         await sleep(200);
         var cards = [].slice.call(wideDoc.querySelectorAll(".card")).map(function (c) { return c.getBoundingClientRect(); });
-        record("on a wide screen the cards sit side by side", cards.length === 2 && cards[0].right <= cards[1].left + 1 && Math.abs(cards[0].top - cards[1].top) < 2,
-          "left card ends at " + Math.round(cards[0].right) + ", right card starts at " + Math.round(cards[1].left));
+        record("on a wide screen the featured card spans the row and the other two sit side by side", cards.length === 3 && cards[1].right <= cards[2].left + 1 && Math.abs(cards[1].top - cards[2].top) < 2 && cards[0].bottom <= cards[1].top + 1,
+          "featured card ends at " + Math.round(cards[0].bottom) + ", the others start at " + Math.round(cards[1].top));
         var stacked = [].slice.call(doc.querySelectorAll(".card")).map(function (c) { return c.getBoundingClientRect(); });
-        record("on a phone the cards stack", stacked[1].top >= stacked[0].bottom - 1, "second card starts at " + Math.round(stacked[1].top));
+        record("on a phone the cards stack", stacked[1].top >= stacked[0].bottom - 1 && stacked[2].top >= stacked[1].bottom - 1, "second card starts at " + Math.round(stacked[1].top));
 
         record("the page loads only its own stylesheet and nothing external",
           win.performance.getEntriesByType("resource").every(function (e) { return new URL(e.name).origin === win.location.origin; }) &&
@@ -83,13 +83,14 @@
         record("the privacy note names the one request that leaves the browser",
           /Open-Meteo/.test(doc.querySelector(".home-footer").textContent) && /no network requests/.test(doc.querySelector(".home-footer").textContent));
 
+        var explore = await fetchDoc("../explore.html");
         var play = await fetchDoc("../play.html");
         var wallpaper = await fetchDoc("../wallpaper.html");
         record("both destinations exist and are the right pages",
-          play.status === 200 && /Star Launcher/.test(play.doc.title) && wallpaper.status === 200 && /Memory sky wallpaper maker/.test(wallpaper.doc.title),
+          explore.status === 200 && /Explore a memory sky/.test(explore.doc.title) && play.status === 200 && /Star Launcher/.test(play.doc.title) && wallpaper.status === 200 && /Memory sky wallpaper maker/.test(wallpaper.doc.title),
           play.doc.title + " | " + wallpaper.doc.title);
-        record("each destination links back to the front page",
-          !!play.doc.querySelector('nav a[href="index.html"]') && !!wallpaper.doc.querySelector('a.brand[href="index.html"]'));
+        record("each destination links back to the front page (the game's link is built by game.js)",
+          !!explore.doc.querySelector('a.brand[href="index.html"]') && /href="index\.html"/.test(await (await fetch("../game.js")).text()) && !!wallpaper.doc.querySelector('a.brand[href="index.html"]'));
         var credits = await fetch("../vendor/THIRD_PARTY.md");
         record("the credits link resolves", credits.status === 200);
 
