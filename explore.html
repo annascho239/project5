@@ -31,7 +31,12 @@
           <button id="open-wallpaper" class="button button-primary" type="button">Preview and download wallpaper</button>
           <button id="edit-memory" class="button" type="button">Change the memory</button>
         </div>
-        <div id="explore-groups"></div>
+        <div class="view-switch" role="group" aria-label="Show the sky as">
+          <button id="show-map" class="button" type="button" aria-pressed="true">Map</button>
+          <button id="show-list" class="button" type="button" aria-pressed="false">List</button>
+        </div>
+        <div id="sky-map-panel" class="sky-map"></div>
+        <div id="explore-groups" hidden></div>
       </section>
 
       <section id="view-learn" class="view" aria-labelledby="learn-heading" hidden>

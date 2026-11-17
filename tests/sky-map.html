@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sky map interaction checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" width="393" height="852" title="Explore page under test"></iframe>
+
+  <script type="module">
+    import { loadCatalog } from "../game-levels.js";
+    import { quickAssess } from "../game-pool.js";
+    import { visibleConstellations, constellationStars, centerOf } from "../sky-engine.js";
+    import { VIEW_LIMITS, directionVector, horizonVector, makeProjector, vectorToAzAlt } from "../sky-projection.js";
+
+    const frame = document.getElementById("app");
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    async function waitFor(predicate, ms = 20000) {
+      for (let waited = 0; waited < ms; waited += 50) { if (predicate()) return true; await sleep(50); }
+      return false;
+    }
+    const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance;
+    const angleGap = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+    const PLACES = {
+      Chicago: [{ id: 4887398, name: "Chicago", latitude: 41.85003, longitude: -87.65005, timezone: "America/Chicago", admin1: "Illinois", admin2: "Cook", country: "United States" }],
+      Sydney: [{ id: 2147714, name: "Sydney", latitude: -33.86785, longitude: 151.20732, timezone: "Australia/Sydney", admin1: "New South Wales", country: "Australia" }],
+    };
+    let win, doc;
+    const $ = (selector) => doc.querySelector(selector);
+    const $$ = (selector) => [...doc.querySelectorAll(selector)];
+    const text = (selector) => $(selector).textContent.trim().replace(/\s+/g, " ");
+    const shown = () => ["memory", "explore", "learn", "play", "wallpaper"].filter((name) => !$(`#view-${name}`).hidden);
+    const errors = [];
+    const canvas = () => $("#sky-canvas");
+    const viewNow = () => ({ azimuth: Number(canvas().dataset.az), altitude: Number(canvas().dataset.alt), fov: Number(canvas().dataset.fov) });
+
+    async function load() {
+      frame.src = "../explore.html?run=" + Math.random();
+      for (let i = 0; i < 200; i += 1) {
+        await sleep(100);
+        if (frame.contentDocument && frame.contentDocument.querySelector("#memory-form")) break;
+      }
+      win = frame.contentWindow; doc = frame.contentDocument;
+      win.addEventListener("error", (e) => errors.push(e.message));
+      win.addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
+      const realFetch = win.fetch.bind(win);
+      win.fetch = (url, ...rest) => {
+        if (String(url).includes("geocoding-api.open-meteo.com")) {
+          const name = new URL(String(url)).searchParams.get("name");
+          return Promise.resolve(new win.Response(JSON.stringify({ results: PLACES[name] || [] }), { status: 200 }));
+        }
+        return realFetch(url, ...rest);
+      };
+      await sleep(200);
+    }
+    function type(selector, value) { const el = $(selector); el.value = value; el.dispatchEvent(new win.Event("input", { bubbles: true })); }
+    async function explore(place, date, time) {
+      type("#memory-title", "A night"); type("#place-query", place); $("#place-search").click();
+      await waitFor(() => $("#place-options input"));
+      const radio = $('input[name="place-choice"]'); radio.checked = true; radio.dispatchEvent(new win.Event("change", { bubbles: true }));
+      type("#local-date", date); type("#local-time", time);
+      $("#explore-button").click();
+      await waitFor(() => shown().join() === "explore" && canvas() && canvas().dataset.az !== undefined, 15000);
+      await sleep(150);
+    }
+    function pointer(type_, x, y, id = 1) {
+      const rect = canvas().getBoundingClientRect();
+      canvas().dispatchEvent(new win.PointerEvent(type_, { bubbles: true, cancelable: true, pointerId: id, isPrimary: id === 1, button: 0, clientX: rect.left + x, clientY: rect.top + y }));
+    }
+    const drag = async (x1, y1, x2, y2, steps = 6) => {
+      pointer("pointerdown", x1, y1);
+      for (let i = 1; i <= steps; i += 1) pointer("pointermove", x1 + ((x2 - x1) * i) / steps, y1 + ((y2 - y1) * i) / steps);
+      pointer("pointerup", x2, y2);
+      await sleep(80);
+    };
+    const tap = async (x, y) => { pointer("pointerdown", x, y); pointer("pointerup", x, y); await sleep(80); };
+    const key = (name, options = {}) => canvas().dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+    // Where on the screen a constellation's figure or a sky direction is, computed independently with the tested projection
+    function projectorNow() {
+      const rect = canvas().getBoundingClientRect();
+      return makeProjector(viewNow(), rect.width, rect.height);
+    }
+    function screenOfStar(ra, dec, observer, date) { return projectorNow().project(horizonVector(ra, dec, observer, date)); }
+    function bestFigurePoint(id, catalog, observer, date, bottomMargin = 150) {
+      // the on-screen midpoint of the first drawn line segment of a constellation (a spot that is surely on its figure)
+      const projector = projectorNow();
+      const rect = canvas().getBoundingClientRect();
+      for (const line of catalog.lines.get(id)) {
+        for (let i = 0; i < line.length - 1; i += 1) {
+          const a = horizonVector(line[i][0], line[i][1], observer, date), b = horizonVector(line[i + 1][0], line[i + 1][1], observer, date);
+          if (a[2] < 0.05 || b[2] < 0.05) continue;
+          const mid = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+          const length = Math.hypot(...mid);
+          const p = projector.project(mid.map((c) => c / length));
+          if (p && p.x > 40 && p.x < rect.width - 70 && p.y > 40 && p.y < rect.height - bottomMargin) return p;
+        }
+      }
+      return null;
+    }
+    // A spot on the screen with no constellation figure within `distance` pixels, found with the tested projection.
+    function findEmptySpot(catalog, observer, date, distance, fromEnd = false) {
+      const projector = projectorNow();
+      const rect = canvas().getBoundingClientRect();
+      const figurePoints = [];
+      for (const [, polylines] of catalog.lines) for (const line of polylines) for (let i = 0; i < line.length - 1; i += 1) {
+        const a = horizonVector(line[i][0], line[i][1], observer, date), b = horizonVector(line[i + 1][0], line[i + 1][1], observer, date);
+        for (let t = 0; t <= 1; t += 0.1) {
+          const v = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+          const length = Math.hypot(...v);
+          const p = projector.project(v.map((c) => c / length));
+          if (p) figurePoints.push(p);
+        }
+      }
+      const spots = [];
+      for (let y = 40; y < rect.height - 160; y += 8) for (let x = 20; x < rect.width - 70; x += 8) spots.push({ x, y });
+      if (fromEnd) spots.reverse();
+      return spots.find((s) => !figurePoints.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < distance)) || null;
+    }
+    const sheetOpen = () => !$("#sky-sheet").hidden;
+    const sheetTitle = () => (sheetOpen() ? text("#sky-sheet h3") : "");
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const chicago = { latitude: 41.85003, longitude: -87.65005 };
+      const sydney = { latitude: -33.86785, longitude: 151.20732 };
+      const chicagoJan = new Date("2025-01-02T03:00:00Z");
+
+      await load();
+      await explore("Chicago", "2025-01-01", "21:00");
+
+      // ===== What you see first =====
+      const v0 = viewNow();
+      record("the map opens facing south from Chicago, at a comfortable height and zoom",
+        shown().join() === "explore" && near(v0.azimuth, 180, 0.01) && near(v0.altitude, 35, 0.01) && near(v0.fov, 100, 0.01), JSON.stringify(v0));
+      const rect = canvas().getBoundingClientRect();
+      const ctx = canvas().getContext("2d");
+      const pixels = ctx.getImageData(0, 0, canvas().width, canvas().height).data;
+      const colours = new Set();
+      for (let i = 0; i < pixels.length; i += 4 * 397) colours.add(`${pixels[i] >> 4},${pixels[i + 1] >> 4},${pixels[i + 2] >> 4}`);
+      record("the sky is drawn (stars, figures, and shading, not a blank box)", colours.size > 25 && rect.width > 300 && rect.height > 300, `${colours.size} colour bands, ${Math.round(rect.width)}×${Math.round(rect.height)} px`);
+      record("drawing a frame is fast (well inside a 60-frames-a-second budget)", Number(canvas().dataset.drawMs) < 12, `${canvas().dataset.drawMs} ms`);
+
+      // The ground is darker than the sky just above the horizon (independent check of where the horizon is drawn)
+      const projector = projectorNow();
+      const brightness = (x, y) => { const d = ctx.getImageData(Math.round(x * canvas().width / rect.width), Math.round(y * canvas().height / rect.height), 1, 1).data; return d[0] + d[1] + d[2]; };
+      const above = projector.project(directionVector(180, 6)), below = projector.project(directionVector(180, -12));
+      record("the horizon is where the sky engine says: sky above it, darker ground below it", above && below && brightness(above.x, above.y) > brightness(below.x, below.y) + 20,
+        `sky just above ${brightness(above.x, above.y)} versus ground ${brightness(below.x, below.y)}`);
+
+      // ===== Looking around =====
+      await drag(200, 300, 300, 300);
+      const afterRight = viewNow();
+      record("dragging right turns the view toward smaller azimuth, so the sky follows the finger", afterRight.azimuth < v0.azimuth - 5 && near(afterRight.altitude, v0.altitude, 0.01), `${v0.azimuth}° → ${afterRight.azimuth}°`);
+      await drag(200, 200, 200, 300);
+      const afterDown = viewNow();
+      record("dragging down looks higher in the sky", afterDown.altitude > afterRight.altitude + 5, `${afterRight.altitude}° → ${afterDown.altitude}°`);
+      await drag(200, 300, 200, 4000, 4);
+      const clampedLow = viewNow();
+      await drag(200, 300, 200, -4000, 4);
+      record("you cannot look straight through the ground or past the zenith", clampedLow.altitude <= VIEW_LIMITS.maxAltitude && viewNow().altitude >= VIEW_LIMITS.minAltitude, `highest ${clampedLow.altitude}°, lowest ${viewNow().altitude}°`);
+      $("[data-reset]").click(); await sleep(80);
+      record("Reset puts the view back where it began", angleGap(viewNow().azimuth, 180) < 0.01 && near(viewNow().altitude, 35, 0.01) && near(viewNow().fov, 100, 0.01));
+
+      await drag(100, 300, 5, 300, 5); await drag(100, 300, 5, 300, 5); await drag(100, 300, 5, 300, 5); await drag(100, 300, 5, 300, 5);
+      const turned = viewNow();
+      record("azimuth wraps around the compass when you keep turning", turned.azimuth >= 0 && turned.azimuth < 360 && angleGap(turned.azimuth, 180) > 10, `${turned.azimuth}°`);
+      $("[data-reset]").click(); await sleep(60);
+
+      // ===== Zooming =====
+      canvas().dispatchEvent(new win.WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -300 }));
+      await sleep(80);
+      const zoomedIn = viewNow().fov;
+      canvas().dispatchEvent(new win.WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100000 }));
+      await sleep(80);
+      const zoomedOut = viewNow().fov;
+      record("the mouse wheel zooms in and out, and stops at the limits", zoomedIn < 100 && zoomedIn >= VIEW_LIMITS.minFov && near(zoomedOut, VIEW_LIMITS.maxFov, 0.01), `100° → ${zoomedIn}° → ${zoomedOut}°`);
+      $("[data-reset]").click(); await sleep(60);
+      $('[data-zoom="in"]').click(); $('[data-zoom="in"]').click(); await sleep(60);
+      const buttonIn = viewNow().fov;
+      $('[data-zoom="out"]').click(); await sleep(60);
+      record("the + and − buttons zoom by steps", near(buttonIn, 100 / 1.25 / 1.25, 0.01) && near(viewNow().fov, 100 / 1.25, 0.01), `${buttonIn}° then ${viewNow().fov}°`);
+      $("[data-reset]").click(); await sleep(60);
+      pointer("pointerdown", 150, 300, 1); pointer("pointerdown", 250, 300, 2);
+      pointer("pointermove", 100, 300, 1); pointer("pointermove", 300, 300, 2);
+      pointer("pointerup", 100, 300, 1); pointer("pointerup", 300, 300, 2);
+      await sleep(80);
+      record("pinching two fingers apart zooms in", viewNow().fov < 70, `${viewNow().fov}°`);
+      $("[data-reset]").click(); await sleep(60);
+
+      // ===== Keyboard =====
+      canvas().focus();
+      key("ArrowRight"); key("ArrowRight"); key("ArrowUp"); key("+");
+      await sleep(80);
+      const k = viewNow();
+      record("the arrow keys look around and + zooms", near(k.azimuth, 196, 0.01) && near(k.altitude, 43, 0.01) && near(k.fov, 80, 0.01), JSON.stringify(k));
+      key("Home"); await sleep(60);
+      record("Home resets the view", near(viewNow().azimuth, 180, 0.01) && near(viewNow().fov, 100, 0.01));
+      $('[data-face="90"]').click(); await sleep(60);
+      record("the compass buttons turn you toward that direction", near(viewNow().azimuth, 90, 0.01));
+      $('[data-face="up"]').click(); await sleep(60);
+      record("Overhead looks straight up", near(viewNow().altitude, 90, 0.01));
+      $("[data-reset]").click(); await sleep(60);
+
+      // ===== Tapping constellations =====
+      const casPoint = bestFigurePoint("Cas", catalog, chicago, chicagoJan);
+      $('[data-face="0"]').click(); await sleep(80);
+      const casNow = bestFigurePoint("Cas", catalog, chicago, chicagoJan);
+      record("Cassiopeia can be found on the map facing north (its figure is on screen)", !!casNow, casNow ? `at (${Math.round(casNow.x)}, ${Math.round(casNow.y)})` : "off screen");
+      await tap(casNow.x, casNow.y);
+      record("tapping Cassiopeia's lines selects it and opens its sheet with Play and Learn",
+        sheetTitle() === "Cassiopeia" && $$("#sky-sheet button[data-action]").map((b) => b.dataset.action).join() === "play,learn" && canvas().dataset.selected === "Cas", sheetTitle());
+      key("Escape"); await sleep(60);
+      await tap(casNow.x + 14, casNow.y);
+      record("a fingertip does not have to be exact: a tap 14 px off a line still selects that constellation", canvas().dataset.selected === "Cas", `tapped 14 px right of the line → "${canvas().dataset.selected}"`);
+      key("Escape"); await sleep(60);
+      await tap(casNow.x, casNow.y);
+      record("the selection is announced for screen readers", /Cassiopeia selected\. You can play it/.test(text("#sky-live")), text("#sky-live"));
+      record("the sheet buttons are named and at least 44px tall", $$("#sky-sheet button").every((b) => (b.getAttribute("aria-label") || b.textContent.trim()) && b.getBoundingClientRect().height >= 44),
+        $$("#sky-sheet button").map((b) => b.getAttribute("aria-label")).join(" | "));
+      const TAP_REACH = 24, GAP = TAP_REACH + 8; // a gap must be wider than a tap's reach, with margin for how finely the test samples lines
+      const empty = findEmptySpot(catalog, chicago, chicagoJan, GAP);
+      if (empty) await tap(empty.x, empty.y);
+      record(`tapping a gap between figures (more than ${GAP} px from every line) clears the selection`, !!empty && !sheetOpen() && canvas().dataset.selected === "", empty ? `tapped (${empty.x}, ${empty.y})` : "no gap found on this view");
+
+      $("[data-reset]").click(); await sleep(80);
+      let orionPoint = bestFigurePoint("Ori", catalog, chicago, chicagoJan);
+      if (!orionPoint) { $('[data-face="180"]').click(); await sleep(80); orionPoint = bestFigurePoint("Ori", catalog, chicago, chicagoJan); }
+      await tap(orionPoint.x, orionPoint.y);
+      record("tapping Orion selects it, with Learn only and the reason it cannot be played",
+        sheetTitle() === "Orion" && $$("#sky-sheet button[data-action]").map((b) => b.dataset.action).join() === "learn" && /Too many stars/.test(text("#sky-sheet")), text("#sky-sheet").slice(0, 120));
+      await tap(orionPoint.x, orionPoint.y);
+      await sleep(80);
+
+      // With nothing selected, a tap in a different gap still selects nothing
+      const otherGap = findEmptySpot(catalog, chicago, chicagoJan, GAP, true);
+      if (otherGap) await tap(otherGap.x, otherGap.y);
+      record("with nothing selected, a tap in a gap between figures selects nothing", !!otherGap && !sheetOpen() && canvas().dataset.selected === "", otherGap ? `tapped (${otherGap.x}, ${otherGap.y})` : "no gap found on this view");
+
+      // Every constellation in view can be reached by tapping its own figure
+      const sky = visibleConstellations(catalog.lines, chicago, chicagoJan).filter((s) => s.status !== "none");
+      let tappable = 0, tried = 0, wrong = [];
+      for (const s of sky) {
+        // face the constellation so its figure is on screen
+        const anchor = (() => { const above = constellationStars(catalog.lines.get(s.id)).map(([ra, dec]) => horizonVector(ra, dec, chicago, chicagoJan)).filter((v) => v[2] > 0); const sum = above.reduce((a, v) => [a[0] + v[0], a[1] + v[1], a[2] + v[2]], [0, 0, 0]); return sum; })();
+        const dir = vectorToAzAlt(anchor);
+        win.document.querySelector("#sky-canvas").focus();
+        // use the keyboard stepping to bring it to the middle
+        canvas().dispatchEvent(new win.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+        // turn directly by buttons: approximate by azimuth steps of 8 degrees
+        let guard = 0;
+        while (angleGap(viewNow().azimuth, dir.azimuth) > 4 && guard < 60) {
+          const delta = ((dir.azimuth - viewNow().azimuth + 540) % 360) - 180;
+          key(delta > 0 ? "ArrowRight" : "ArrowLeft", { shiftKey: Math.abs(delta) > 24 });
+          await sleep(5);
+          guard += 1;
+        }
+        guard = 0;
+        while (Math.abs(viewNow().altitude - Math.max(dir.altitude, 10)) > 4 && guard < 30) {
+          key(viewNow().altitude < Math.max(dir.altitude, 10) ? "ArrowUp" : "ArrowDown", { shiftKey: Math.abs(viewNow().altitude - dir.altitude) > 24 });
+          await sleep(5);
+          guard += 1;
+        }
+        await sleep(40);
+        const point = bestFigurePoint(s.id, catalog, chicago, chicagoJan);
+        if (!point) continue;
+        tried += 1;
+        await tap(point.x, point.y);
+        if (canvas().dataset.selected === s.id) tappable += 1;
+        else wrong.push(`${s.id}→${canvas().dataset.selected || "none"}`);
+        if (tried >= 24) break;
+      }
+      record("tapping a point on a constellation's own line selects that constellation (the nearest figure wins where figures cross)", tried >= 15 && tappable >= tried - 3, `${tappable} of ${tried} selected the right one${wrong.length ? "; others: " + wrong.slice(0, 5).join(", ") : ""}`);
+
+      // ===== Keyboard selection =====
+      $("[data-reset]").click(); await sleep(60);
+      key("Escape"); await sleep(40);
+      key("]"); await sleep(80);
+      const first = canvas().dataset.selected;
+      key("]"); await sleep(80);
+      const second = canvas().dataset.selected;
+      key("["); await sleep(80);
+      record("] and [ step through the constellations from the keyboard, turning the view to each", !!first && !!second && first !== second && canvas().dataset.selected === first && sheetOpen(), `${first} → ${second} → ${canvas().dataset.selected}`);
+      key("Escape"); await sleep(60);
+      record("Escape clears the selection", !sheetOpen());
+
+      // ===== Going to Play or Learn and coming back =====
+      $('[data-face="0"]').click(); await sleep(80);
+      const casAgain = bestFigurePoint("Cas", catalog, chicago, chicagoJan);
+      await tap(casAgain.x, casAgain.y);
+      const viewBefore = viewNow();
+      $('#sky-sheet button[data-action="learn"]').click();
+      await sleep(150);
+      record("Learn from the map opens Cassiopeia's Learn screen", shown().join() === "learn" && /Cassiopeia/.test(text("#learn-heading")));
+      $("#learn-back").click();
+      await sleep(150);
+      const viewAfter = viewNow();
+      record("coming back, the map still shows the same view and the same selection, with focus on the button you used",
+        shown().join() === "explore" && near(viewAfter.azimuth, viewBefore.azimuth, 0.01) && near(viewAfter.fov, viewBefore.fov, 0.01) && canvas().dataset.selected === "Cas" && doc.activeElement.getAttribute("aria-label") === "Learn about Cassiopeia",
+        `view ${viewBefore.azimuth}° → ${viewAfter.azimuth}°, focus "${doc.activeElement.getAttribute("aria-label")}"`);
+
+      // Play it from the map and see it marked filled
+      $('#sky-sheet button[data-action="play"]').click();
+      await sleep(250);
+      const instant = $("#instant-toggle");
+      instant.checked = true; instant.dispatchEvent(new win.Event("change", { bubbles: true }));
+      const boardKey = (name, options = {}) => $("#board").dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+      const aimNow = () => { const m = /Aim: (\d+)° (left|right)/.exec(text("#aim-readout")); return m ? Number(m[1]) * (m[2] === "left" ? -1 : 1) : 0; };
+      for (const aim of [-30, -70]) {
+        let guard = 0;
+        while (aimNow() !== aim && guard < 100) { const diff = aim - aimNow(); boardKey(diff > 0 ? "ArrowRight" : "ArrowLeft", { shiftKey: Math.abs(diff) >= 5 }); guard += 1; }
+        boardKey(" ");
+      }
+      await sleep(100);
+      $("#win-panel button[data-action='back']").click();
+      await sleep(200);
+      record("after filling Cassiopeia, the map marks it as filled (sheet text, ✓ label, and a gold figure)",
+        /✓ Filled in 2 launches/.test(text("#sky-sheet")) && canvas().dataset.selected === "Cas", text("#sky-sheet").slice(0, 100));
+      const figure = bestFigurePoint("Cas", catalog, chicago, chicagoJan);
+      const probe = ctx.getImageData(Math.round(figure.x * canvas().width / rect.width) - 1, Math.round(figure.y * canvas().height / rect.height) - 1, 3, 3).data;
+      let warm = false;
+      for (let i = 0; i < probe.length; i += 4) if (probe[i] > 200 && probe[i + 1] > 170 && probe[i + 2] > 120) warm = true;
+      record("the filled constellation's figure is drawn bright (selected, so white-gold)", warm);
+
+      // ===== Partly visible constellations =====
+      const partial = visibleConstellations(catalog.lines, chicago, chicagoJan).find((s) => s.status === "partial");
+      let partialPoint = null;
+      for (const direction of [180, 90, 270, 0]) {
+        $(`[data-face="${direction}"]`).click(); await sleep(60);
+        for (const altitudeKeys of [0, 1]) { partialPoint = bestFigurePoint(partial.id, catalog, chicago, chicagoJan); if (partialPoint) break; }
+        if (partialPoint) break;
+      }
+      if (partialPoint) {
+        await tap(partialPoint.x, partialPoint.y);
+        record("a partly visible constellation can be selected, says so, and offers Learn only",
+          canvas().dataset.selected === partial.id && /Only part of it was above the horizon/.test(text("#sky-sheet")) && $$("#sky-sheet button[data-action]").map((b) => b.dataset.action).join() === "learn", `${partial.id}: ${text("#sky-sheet").slice(0, 90)}`);
+      } else record("a partly visible constellation can be selected (none found on screen in four directions)", false, partial.id);
+
+      // ===== A different sky =====
+      $("#edit-memory").click();
+      await sleep(80);
+      type("#place-query", "Sydney"); $("#place-search").click();
+      await waitFor(() => $("#place-options input"));
+      const sydneyRadio = $('input[name="place-choice"]'); sydneyRadio.checked = true; sydneyRadio.dispatchEvent(new win.Event("change", { bubbles: true }));
+      type("#local-date", "2025-01-01"); type("#local-time", "21:00");
+      $("#explore-button").click();
+      await waitFor(() => shown().join() === "explore" && near(viewNow().azimuth, 0, 0.5), 10000);
+      await sleep(150);
+      record("exploring a new place starts the view facing north from a southern place, with nothing selected even though Aquarius was selected before and is up in both skies",
+        near(viewNow().azimuth, 0, 0.01) && canvas().dataset.selected === "" && !sheetOpen(), `facing ${viewNow().azimuth}°, selected "${canvas().dataset.selected}"`);
+      $('[data-face="180"]').click(); await sleep(80);
+      const sydneyDate = new Date("2025-01-01T10:00:00Z");
+      const crossPoint = bestFigurePoint("Cru", catalog, sydney, sydneyDate, 40);
+      let crossSelected = false;
+      if (crossPoint) { await tap(crossPoint.x, crossPoint.y); crossSelected = canvas().dataset.selected === "Cru"; }
+      record("facing south from Sydney, tapping the Southern Cross selects it and it is playable", !!crossPoint && crossSelected && $$("#sky-sheet button[data-action]").map((b) => b.dataset.action).join() === "play,learn",
+        crossPoint ? `tapped (${Math.round(crossPoint.x)}, ${Math.round(crossPoint.y)}) → ${canvas().dataset.selected}` : "the Cross was not on screen facing south");
+      key("Escape");
+
+      // ===== List view still works, and the narrow screen =====
+      $("#show-list").click();
+      record("the List view shows a card for the same constellations the map offers",
+        $$("#explore-groups .constellation-card").length === visibleConstellations(catalog.lines, sydney, new Date("2025-01-01T10:00:00Z")).filter((s) => s.status !== "none").length, `${$$("#explore-groups .constellation-card").length} cards`);
+      $("#show-map").click(); await sleep(100);
+      frame.width = 320; await sleep(500);
+      record("at 320 px wide the map screen does not scroll sideways and the map keeps a usable size",
+        doc.documentElement.scrollWidth <= win.innerWidth && canvas().getBoundingClientRect().width > 250 && canvas().getBoundingClientRect().height > 300,
+        `scrollWidth ${doc.documentElement.scrollWidth}, map ${Math.round(canvas().getBoundingClientRect().width)}×${Math.round(canvas().getBoundingClientRect().height)}`);
+      frame.width = 393; await sleep(300);
+
+      // ===== Accessibility basics =====
+      record("the map canvas can be reached by keyboard and has a name and a description",
+        canvas().tabIndex === 0 && /Sky map: \d+ constellations? above the horizon/.test(canvas().getAttribute("aria-label")) && !!canvas().getAttribute("aria-describedby") && /Arrow keys look around/.test(text("#sky-keys")), canvas().getAttribute("aria-label"));
+      record("every control around the map is at least 44px tall and named",
+        $$("#sky-map-panel button").filter((b) => b.getBoundingClientRect().height > 0).every((b) => b.getBoundingClientRect().height >= 44 && (b.getAttribute("aria-label") || b.textContent.trim())),
+        $$("#sky-map-panel button").filter((b) => b.getBoundingClientRect().height > 0).map((b) => Math.round(b.getBoundingClientRect().height)).join(", ") + " px");
+      record("no script errors occurred during the whole run", errors.length === 0, errors.slice(0, 3).join("; "));
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — sky map interaction checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@ import { buildPlayableLevel, quickAssess } from "./game-pool.js";
 import { learnRows, loadStarFacts } from "./learn-facts.js";
 import { describeMoment } from "./memory.js";
 import { mountMemoryForm } from "./memory-form.js";
+import { mountSkyMap } from "./sky-map.js";
 import { compassName, visibleConstellations } from "./sky-engine.js";
 import { mountWallpaper } from "./wallpaper-view.js";
 
@@ -45,7 +46,11 @@ const session = {
   assessments: new Map(), // id → playability verdict (a property of the constellation, never of the sky)
   bests: new Map(), // id → fewest launches that filled it this session
   instant: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  mode: "map", // how "Your sky" is shown: "map" or "list"
 };
+let starTable = null; // rows of [hip, right ascension, declination, magnitude], loaded when first needed
+let skyMap = null;
+const skyById = new Map(); // id → the sky entry for this memory
 let catalog = null;
 let starFacts = null;
 let current = null; // the view now showing
@@ -103,6 +108,11 @@ function show(view, id = null, { push = true } = {}) {
 }
 
 function focusAfterReturn(previous) {
+  if (session.mode === "map" && skyMap) {
+    if (previous && previous !== "explore" && returnTo && skyMap.getSelected() === returnTo.id && skyMap.focusSheetAction(returnTo.action)) return;
+    $("#explore-heading").focus({ preventScroll: true });
+    return;
+  }
   if (previous && previous !== "explore" && returnTo) {
     const button = $(`#explore-groups button[data-id="${CSS.escape(returnTo.id)}"][data-action="${returnTo.action}"]`);
     if (button) {
@@ -184,6 +194,7 @@ function renderExplore() {
     `“${memory.title}” — ${memory.place.label}, ${moment.dateText} at ${moment.timeText} (${moment.zoneText}). These constellations were above the horizon at that moment.`;
   $("#explore-counts").textContent =
     `${play.length} to play, ${learnFull.length} more to learn about, and ${partial.length} partly above the horizon.`;
+  if (skyMap) skyMap.refresh();
   $("#explore-groups").innerHTML = [
     groupMarkup({
       id: "group-play", title: "Ready to play", entries: play, kind: "play",
@@ -209,6 +220,41 @@ $("#explore-groups").addEventListener("click", (event) => {
   returnTo = { id: button.dataset.id, action: button.dataset.action };
   show(button.dataset.action === "play" ? "play" : "learn", button.dataset.id);
 });
+
+/* ---------- The map and the list ---------- */
+
+function describeForMap(id) {
+  const entry = skyById.get(id);
+  const { english, latin } = names(id);
+  const assessment = assess(id);
+  return {
+    english,
+    latin,
+    status: entry.status,
+    starCount: entry.starCount,
+    playable: entry.status === "full" && assessment.playable,
+    difficulty: assessment.difficulty,
+    positionText: positionText(entry),
+    reason: assessment.reason,
+    best: session.bests.get(id) ?? null,
+  };
+}
+
+function setMode(mode) {
+  session.mode = mode;
+  $("#sky-map-panel").hidden = mode !== "map";
+  $("#explore-groups").hidden = mode !== "list";
+  $("#show-map").setAttribute("aria-pressed", String(mode === "map"));
+  $("#show-list").setAttribute("aria-pressed", String(mode === "list"));
+  if (mode === "map" && skyMap) skyMap.refresh();
+}
+$("#show-map").addEventListener("click", () => setMode("map"));
+$("#show-list").addEventListener("click", () => setMode("list"));
+
+async function loadStarTable() {
+  const document_ = await (await fetch("data/stars-compact.json")).json();
+  return document_.stars;
+}
 
 /* ---------- Learn ---------- */
 
@@ -288,14 +334,39 @@ $("#edit-memory").addEventListener("click", () => show("memory"));
 
 /* ---------- Starting out ---------- */
 
-function startExploring(memory) {
+async function startExploring(memory) {
   session.memory = memory;
   session.sky = visibleConstellations(
     catalog.lines,
     { latitude: memory.place.latitude, longitude: memory.place.longitude },
     memory.instant,
   ).filter((item) => item.status !== "none");
+  skyById.clear();
+  session.sky.forEach((item) => skyById.set(item.id, entryFor(item)));
   returnTo = null;
+
+  // The map needs the star table (about 126 KB). If it cannot be loaded, the list still works.
+  if (!skyMap) {
+    try {
+      starTable = starTable || (await loadStarTable());
+      skyMap = mountSkyMap($("#sky-map-panel"), {
+        lines: catalog.lines,
+        stars: starTable,
+        describe: describeForMap,
+        onAction: (id, action) => {
+          returnTo = { id, action };
+          show(action === "play" ? "play" : "learn", id);
+        },
+      });
+    } catch {
+      setMode("list");
+      $("#show-map").hidden = true;
+    }
+  }
+  if (skyMap) {
+    skyMap.setSky({ observer: { latitude: memory.place.latitude, longitude: memory.place.longitude }, date: memory.instant, entries: session.sky });
+    setMode(session.mode);
+  }
   show("explore");
 }
 
@@ -314,6 +385,7 @@ async function start() {
   }
   loadStatus.hidden = true;
   memoryForm = mountMemoryForm(views.memory, { onExplore: startExploring });
+  setMode("map");
   history.replaceState({ view: "memory", id: null }, "");
   show("memory", null, { push: false });
 }

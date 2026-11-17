@@ -203,10 +203,12 @@
       // ===== Explore: the sky for 9 PM, Jan 1 2025 in Chicago =====
       await choosePlace("Chicago", "Illinois");
       fillMemory({ title: "Our first night in Chicago", date: "2025-01-01", time: "21:00" });
-      submit();
-      await sleep(300);
+      submit(); await waitFor(() => shown().join() === "explore", 10000); await sleep(100);
       record("exploring opens the list with focus on its heading, only that screen showing, and a title that says so",
         shown().join() === "explore" && doc.activeElement.id === "explore-heading" && doc.title === "Your sky — Inner Orbit", `shown ${shown().join()}, focus ${doc.activeElement.id}, title "${doc.title}"`);
+      record("the sky opens as a map by default, with a Map and List switch", !$("#sky-map-panel").hidden && $("#explore-groups").hidden && $("#show-map").getAttribute("aria-pressed") === "true" && $("#show-list").getAttribute("aria-pressed") === "false");
+      $("#show-list").click();
+      record("the List button swaps the map for the cards", $("#sky-map-panel").hidden && !$("#explore-groups").hidden && $("#show-list").getAttribute("aria-pressed") === "true");
       record("the summary names the memory, place, local date and time, and zone",
         /Our first night in Chicago/.test(text("#explore-summary")) && /Chicago, Cook, Illinois, United States/.test(text("#explore-summary")) &&
         /January 1, 2025 at 9:00 PM \(CST, UTC-06:00\)/.test(text("#explore-summary")), text("#explore-summary").slice(0, 160));
@@ -274,8 +276,7 @@
         shown().join() === "memory" && $("#memory-title").value === "Our first night in Chicago" && $("#place-query").value === "Chicago" && $("#local-date").value === "2025-01-01" && $("#local-time").value === "21:00");
       await choosePlace("Chicago", "Illinois");
       type("#local-time", "03:00");
-      submit();
-      await sleep(250);
+      submit(); await waitFor(() => shown().join() === "explore", 10000); await sleep(100);
       const lateSky = visibleConstellations(catalog.lines, chicago, new Date("2025-01-01T09:00:00Z")).filter((s) => s.status !== "none"); // 3 AM on Jan 1 (CST)
       const lateFullPlay = lateSky.filter((s) => s.status === "full" && quickAssess(s.id, catalog).playable).map((s) => s.id).sort();
       record("exploring again at 3 AM gives the 3 AM sky, while Cassiopeia stays marked filled",
@@ -285,7 +286,7 @@
 
       // ===== The browser's Back button =====
       $("#edit-memory").click();
-      submit(); await sleep(150);
+      submit(); await waitFor(() => shown().join() === "explore", 10000); await sleep(100);
       cardFor("Cas", "learn").click();
       win.history.back();
       await waitFor(() => shown().join() === "explore", 3000);
@@ -340,8 +341,7 @@
       // The mood chosen on the form styles the wallpaper
       $("#edit-memory").click();
       pick("mood", "energized");
-      submit();
-      await sleep(250);
+      submit(); await waitFor(() => shown().join() === "explore", 10000); await sleep(100);
       $("#open-wallpaper").click();
       await waitFor(() => !$("#wallpaper-download").disabled && $("#wallpaper-frame").dataset.ready === "true", 30000);
       await sleep(400);
@@ -379,7 +379,7 @@
         const element = node.parentElement;
         if (element.closest("[hidden]") || element.getBoundingClientRect().height === 0) continue;
         const color = win.getComputedStyle(element).color.match(/[\d.]+/g).slice(0, 3).map(Number);
-        const onLight = element.closest(".button-primary");
+        const onLight = element.closest(".button-primary, [aria-pressed='true']");
         const ratio = contrast(color, onLight ? [175, 162, 255] : [20, 22, 58]);
         if (ratio < worst) { worst = ratio; worstText = node.textContent.trim().slice(0, 30); }
       }
