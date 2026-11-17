@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage B checkpoint 4 explore flow checks</title>
+  <style>
+    body { margin: 1rem; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; background: #111; color: #eee; }
+    iframe { border: 1px solid #555; background: #fff; }
+    li[data-pass="false"] { color: #ff8a8a; }
+    li[data-pass="true"] { color: #8fe3b5; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <ul id="checks"></ul>
+  <iframe id="app" width="393" height="852" title="Explore page under test"></iframe>
+
+  <script type="module">
+    import { loadCatalog } from "../game-levels.js";
+    import { buildPlayableLevel, quickAssess } from "../game-pool.js";
+    import { createGame, playShot } from "../game-physics.js";
+    import { learnRows, loadStarFacts } from "../learn-facts.js";
+    import { greenwichSiderealDegrees, visibleConstellations } from "../sky-engine.js";
+
+    const frame = document.getElementById("app");
+    const checks = document.getElementById("checks");
+    let allPassed = true;
+    function record(label, passed, detail) {
+      allPassed = allPassed && passed;
+      const item = document.createElement("li");
+      item.dataset.pass = String(passed);
+      item.textContent = (passed ? "PASS — " : "FAIL — ") + label + (detail ? ": " + detail : "");
+      checks.appendChild(item);
+    }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const deg = (d) => (d * Math.PI) / 180;
+    async function waitFor(predicate, ms = 20000) {
+      for (let waited = 0; waited < ms; waited += 50) { if (predicate()) return true; await sleep(50); }
+      return false;
+    }
+
+    // Canned place-search answers in Open-Meteo's shape, so the test needs no network.
+    const PLACES = {
+      Chicago: [
+        { id: 4887398, name: "Chicago", latitude: 41.85003, longitude: -87.65005, timezone: "America/Chicago", admin1: "Illinois", admin2: "Cook", country: "United States" },
+        { id: 3530597, name: "Chicago", latitude: 22.34, longitude: -104.16, timezone: "America/Mexico_City", admin1: "Jalisco", admin2: "Mezquitic", country: "Mexico" },
+        { id: 4887475, name: "Chicago Heights", latitude: 41.50615, longitude: -87.63549, timezone: "America/Chicago", admin1: "Illinois", admin2: "Cook", country: "United States" },
+      ],
+      Sydney: [
+        { id: 2147714, name: "Sydney", latitude: -33.86785, longitude: 151.20732, timezone: "Australia/Sydney", admin1: "New South Wales", country: "Australia" },
+      ],
+    };
+    const requests = [];
+    let failSearch = false;
+
+    let win, doc;
+    const $ = (selector) => doc.querySelector(selector);
+    const $$ = (selector) => [...doc.querySelectorAll(selector)];
+    const text = (selector) => $(selector).textContent.trim().replace(/\s+/g, " ");
+    const shown = () => ["memory", "explore", "learn", "play", "wallpaper"].filter((name) => !$(`#view-${name}`).hidden);
+    const errors = [];
+
+    async function load() {
+      requests.length = 0;
+      frame.src = "../explore.html?run=" + Math.random();
+      for (let i = 0; i < 200; i += 1) {
+        await sleep(100);
+        const d = frame.contentDocument;
+        if (d && d.querySelector("#memory-form")) break;
+      }
+      win = frame.contentWindow; doc = frame.contentDocument;
+      win.addEventListener("error", (e) => errors.push(e.message));
+      win.addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
+      const realFetch = win.fetch.bind(win);
+      win.fetch = (url, ...rest) => {
+        const address = String(url);
+        requests.push(address);
+        if (address.includes("geocoding-api.open-meteo.com")) {
+          if (failSearch) return Promise.reject(new TypeError("offline"));
+          const name = new URL(address).searchParams.get("name");
+          return Promise.resolve(new win.Response(JSON.stringify({ results: PLACES[name] || [] }), { status: 200 }));
+        }
+        return realFetch(url, ...rest);
+      };
+      await sleep(200);
+    }
+    function type(selector, value) {
+      const el = $(selector);
+      el.value = value;
+      el.dispatchEvent(new win.Event("input", { bubbles: true }));
+    }
+    function pick(name, value) {
+      const radio = $(`input[name="${name}"][value="${value}"]`);
+      radio.checked = true;
+      radio.dispatchEvent(new win.Event("change", { bubbles: true }));
+    }
+    async function choosePlace(query, labelPart) {
+      type("#place-query", query);
+      $("#place-search").click();
+      await waitFor(() => $("#place-options input") || /No places|failed/.test(text("#place-status")));
+      const cards = $$("#place-options .choice-card");
+      const index = cards.findIndex((card) => card.textContent.includes(labelPart));
+      if (index >= 0) pick("place-choice", index);
+      return index >= 0;
+    }
+    function fillMemory({ title, date, time }) {
+      type("#memory-title", title); type("#local-date", date); type("#local-time", time);
+    }
+    function submit() { $("#explore-button").click(); }
+    function key(name, options = {}) {
+      $("#board").dispatchEvent(new win.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...options }));
+    }
+    function aimReadout() {
+      const m = /Aim: (\d+)° (left|right)/.exec(text("#aim-readout"));
+      return m ? Number(m[1]) * (m[2] === "left" ? -1 : 1) : 0;
+    }
+    function shoot(aim) {
+      let guard = 0;
+      while (aimReadout() !== aim && guard < 200) {
+        const diff = aim - aimReadout();
+        key(diff > 0 ? "ArrowRight" : "ArrowLeft", { shiftKey: Math.abs(diff) >= 5 });
+        guard += 1;
+      }
+      key(" ");
+    }
+    const cardFor = (id, action) => $(`#explore-groups button[data-id="${id}"][data-action="${action}"]`);
+    const group = (groupId) => `section[aria-labelledby="${groupId}"]`; // the id sits on the group's heading
+    function groupIds(groupId) { return $$(`${group(groupId)} .constellation-card button[data-action="learn"]`).map((b) => b.dataset.id).sort(); }
+    function winPlan(level) {
+      const sim = createGame(level);
+      const plan = [];
+      while (!sim.won && plan.length < 20) {
+        let best = null;
+        for (let d = -70; d <= 70; d += 1) {
+          const trial = createGame(level);
+          trial.lit = [...sim.lit];
+          playShot(trial, deg(d));
+          const gain = trial.lit.filter(Boolean).length - sim.lit.filter(Boolean).length;
+          if (!best || gain > best.gain) best = { d, gain };
+        }
+        if (best.gain <= 0) break;
+        plan.push(best.d);
+        playShot(sim, deg(best.d));
+      }
+      return plan;
+    }
+    const channel = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+    const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+
+    try {
+      const catalog = await loadCatalog("../vendor/d3-celestial/data/");
+      const starFacts = await loadStarFacts("../data/constellation-stars.json");
+      const chicago = { latitude: 41.85003, longitude: -87.65005 };
+      const chicagoJan = new Date("2025-01-02T03:00:00Z");
+      const expectedSky = visibleConstellations(catalog.lines, chicago, chicagoJan).filter((s) => s.status !== "none");
+      const expectPlay = expectedSky.filter((s) => s.status === "full" && quickAssess(s.id, catalog).playable).map((s) => s.id).sort();
+      const expectLearn = expectedSky.filter((s) => s.status === "full" && !quickAssess(s.id, catalog).playable).map((s) => s.id).sort();
+      const expectPartial = expectedSky.filter((s) => s.status === "partial").map((s) => s.id).sort();
+
+      await load();
+
+      // ===== The memory form =====
+      record("the page opens on the memory form, with only that screen showing and the button saying Explore constellations",
+        shown().join() === "memory" && text("#memory-heading") === "Describe a memory" && /^Explore constellations/.test(text("#explore-button")) && $("#load-status").hidden,
+        `shown: ${shown().join()}; button: "${text("#explore-button")}"`);
+      const names = win.performance.getEntriesByType("resource").map((e) => new URL(e.name).pathname.split("/").pop());
+      record("opening the page does not load the sky library or the star files (the wallpaper preview waits until it is opened)",
+        !names.includes("celestial.min.js") && !names.includes("d3.v3.5.17.min.js") && !names.includes("stars.6.json") && !names.includes("starnames.json"),
+        `${names.length} files loaded, none of the sky library`);
+      record("no horizontal overflow at phone width", doc.documentElement.scrollWidth <= win.innerWidth, `scrollWidth ${doc.documentElement.scrollWidth}`);
+
+      submit();
+      const flagged = $$('[aria-invalid="true"]').length;
+      record("pressing Explore with nothing filled in flags the title, place, date, and time, focuses the first, and stays on the form",
+        flagged === 4 && doc.activeElement.id === "memory-title" && shown().join() === "memory", `${flagged} flagged, focus ${doc.activeElement.id}`);
+
+      type("#memory-title", "Our first night in Chicago");
+      const found = await choosePlace("Chicago", "Illinois");
+      const cards = $$("#place-options .choice-card");
+      record("searching shows several places with region and time zone so similar names can be told apart",
+        found && cards.length === 3 && cards[0].textContent.includes("Cook, Illinois, United States") && cards[0].textContent.includes("America/Chicago") && cards[1].textContent.includes("Mexico"),
+        cards.map((c) => c.textContent.replace(/\s+/g, " ").trim().slice(0, 50)).join(" | "));
+
+      fillMemory({ title: "Our first night in Chicago", date: "2025-03-09", time: "02:30" });
+      record("a time that does not exist (daylight-saving jump) is rejected with a clear message",
+        /does not exist/.test(text("#local-time-error")) && $("#local-time").getAttribute("aria-invalid") === "true", text("#local-time-error"));
+      fillMemory({ title: "Our first night in Chicago", date: "2025-11-02", time: "01:30" });
+      record("a repeated clock time (fall-back) asks which one: earlier or later, with their time-zone names",
+        !$("#time-choice").hidden && $$("#time-choice-options .choice-card").length === 2 && /CDT/.test(text("#time-choice-options")) && /CST/.test(text("#time-choice-options")), text("#time-choice-options"));
+      submit();
+      record("choosing between the two is required before exploring", shown().join() === "memory" && /earlier or later/.test(text("#local-time-error")), text("#local-time-error"));
+
+      type("#place-query", "Chicag");
+      record("editing the place text invalidates the selection and clears the results", $("#place-results").hidden && /Choose Find place/.test((submit(), text("#place-error"))));
+      failSearch = true;
+      $("#place-search").click();
+      await waitFor(() => /failed/.test(text("#place-status")), 5000);
+      failSearch = false;
+      record("a failed place search says so and keeps everything else the player entered",
+        /failed/.test(text("#place-status")) && $("#memory-title").value === "Our first night in Chicago" && $("#local-date").value === "2025-11-02" && !$("#place-search").disabled, text("#place-status"));
+
+      // ===== Explore: the sky for 9 PM, Jan 1 2025 in Chicago =====
+      await choosePlace("Chicago", "Illinois");
+      fillMemory({ title: "Our first night in Chicago", date: "2025-01-01", time: "21:00" });
+      submit();
+      await sleep(300);
+      record("exploring opens the list with focus on its heading, only that screen showing, and a title that says so",
+        shown().join() === "explore" && doc.activeElement.id === "explore-heading" && doc.title === "Your sky — Inner Orbit", `shown ${shown().join()}, focus ${doc.activeElement.id}, title "${doc.title}"`);
+      record("the summary names the memory, place, local date and time, and zone",
+        /Our first night in Chicago/.test(text("#explore-summary")) && /Chicago, Cook, Illinois, United States/.test(text("#explore-summary")) &&
+        /January 1, 2025 at 9:00 PM \(CST, UTC-06:00\)/.test(text("#explore-summary")), text("#explore-summary").slice(0, 160));
+      record("the three groups hold exactly the constellations the sky engine and the playability rule say they should",
+        JSON.stringify(groupIds("group-play")) === JSON.stringify(expectPlay) && JSON.stringify(groupIds("group-learn")) === JSON.stringify(expectLearn) && JSON.stringify(groupIds("group-partial")) === JSON.stringify(expectPartial),
+        `play ${expectPlay.length}, learn-only ${expectLearn.length}, partly up ${expectPartial.length}`);
+      record("the counts line says the same as the groups", text("#explore-counts") === `${expectPlay.length} to play, ${expectLearn.length} more to learn about, and ${expectPartial.length} partly above the horizon.`, text("#explore-counts"));
+      const cas = cardFor("Cas", "play"), orionPlay = cardFor("Ori", "play"), orionLearn = cardFor("Ori", "learn");
+      record("Cassiopeia offers Play and Learn; Orion offers Learn only, with the reason it cannot be played",
+        !!cas && !!cardFor("Cas", "learn") && !orionPlay && !!orionLearn && /Too many stars/.test(orionLearn.closest(".constellation-card").textContent), orionLearn.closest(".constellation-card").textContent.replace(/\s+/g, " ").trim().slice(0, 120));
+      const playButtons = $$(`${group("group-play")} button[data-action="play"]`);
+      const labels = $$("#explore-groups button[data-action]").map((b) => b.getAttribute("aria-label"));
+      record("every button has a unique name that includes its constellation, and is at least 44px tall",
+        new Set(labels).size === labels.length && labels.every(Boolean) && $$("#explore-groups button").every((b) => b.getBoundingClientRect().height >= 44), `${labels.length} buttons; e.g. "${labels[0]}"`);
+      const difficulties = playButtons.map((b) => quickAssess(b.dataset.id, catalog).difficulty);
+      const rank = { Easy: 0, Medium: 1, Hard: 2 };
+      record("playable constellations are listed easiest first", difficulties.every((d, i) => i === 0 || rank[d] >= rank[difficulties[i - 1]]), [...new Set(difficulties)].join(" → "));
+      record("the partly-visible cards say how many stars were up", /\d+ of \d+ stars above the horizon/.test($(`${group("group-partial")} .constellation-card`).textContent), $(`${group("group-partial")} .constellation-card`).textContent.replace(/\s+/g, " ").trim().slice(0, 100));
+      record("no horizontal overflow on the explore list", doc.documentElement.scrollWidth <= win.innerWidth);
+
+      // ===== Learn =====
+      orionLearn.click();
+      const orion = learnRows("Ori", catalog, starFacts, { observer: chicago, date: chicagoJan, timeZone: "America/Chicago" });
+      const shownRows = $$("#learn-facts dt").map((dt) => [dt.textContent, dt.nextElementSibling.textContent]);
+      record("Learn shows Orion with focus on its heading, and exactly the rows the facts module computes for this sky",
+        shown().join() === "learn" && doc.activeElement.id === "learn-heading" && /^Orion/.test(text("#learn-heading")) && JSON.stringify(shownRows) === JSON.stringify(orion), `${shownRows.length} rows; ${shownRows.find((r) => r[0] === "Brightest star in the pattern")?.[1]}`);
+      record("Orion cannot be played from Learn, and the magnitude note and credits are shown", $("#learn-play").hidden && /smaller numbers are brighter/.test(text(".learn-note")) && /vendor\/THIRD_PARTY\.md/.test($(".site-footer a[href$='THIRD_PARTY.md']").getAttribute("href")));
+      $("#learn-back").click();
+      record("Back to constellations returns to the list with focus on the Learn button that opened it", shown().join() === "explore" && doc.activeElement === cardFor("Ori", "learn"), `focus: ${doc.activeElement.getAttribute("aria-label")}`);
+      cardFor("Cas", "learn").click();
+      record("a playable constellation's Learn screen offers Play this constellation", shown().join() === "learn" && !$("#learn-play").hidden && $("#learn-play").getAttribute("aria-label") === "Play Cassiopeia");
+      $("#learn-back-top").click();
+
+      // ===== Play =====
+      cardFor("Cas", "play").click();
+      await sleep(200);
+      record("Play opens that constellation's board with focus on the board, with no level picker and no 'Next level'",
+        shown().join() === "play" && text("#game-title") === "Cassiopeia" && doc.activeElement.id === "board" && !$("#level-options") && !$("#next-button"), `title ${text("#game-title")}, focus ${doc.activeElement.id}`);
+      $("#instant-toggle").checked = true;
+      $("#instant-toggle").dispatchEvent(new win.Event("change", { bubbles: true }));
+      const level = buildPlayableLevel("Cas", catalog);
+      const plan = winPlan(level);
+      for (const aim of plan) shoot(aim);
+      await sleep(100);
+      const actions = $$("#win-panel button").filter((b) => !b.hidden).map((b) => b.textContent.trim());
+      record("filling the constellation shows the win panel with Play again, Back to constellations, and Learn about it (no facts list here)",
+        !$("#win-panel").hidden && /Cassiopeia filled/.test(text("#win-title")) && actions.join() === "Play again,Back to constellations,Learn about it" && $("#win-facts").hidden, `${plan.length} launches; buttons: ${actions.join(" / ")}`);
+      $("#win-panel button[data-action='back']").click();
+      await sleep(100);
+      const casCard = cardFor("Cas", "play").closest(".constellation-card");
+      record("back on the list, Cassiopeia is marked filled with its launch count, its button now says Play again, and focus returns to it",
+        shown().join() === "explore" && /✓ Filled in \d+ launch/.test(casCard.textContent) && cardFor("Cas", "play").textContent.trim() === "Play again" && doc.activeElement === cardFor("Cas", "play") && $$("#board").length === 0,
+        `${casCard.textContent.replace(/\s+/g, " ").trim().slice(0, 90)}; boards left: ${$$("#board").length}`);
+
+      cardFor("UMi", "play").click();
+      await sleep(150);
+      record("the 'instant results' choice carries over to the next constellation", $("#instant-toggle").checked === true);
+      doc.querySelector("#win-panel").hidden = true;
+      $("#view-play [data-action='back']").click();
+      record("another constellation, once left, leaves no game behind", shown().join() === "explore" && $$("#board").length === 0);
+
+      // ===== Changing the memory keeps what you did =====
+      $("#edit-memory").click();
+      record("Change the memory returns to the form with everything still filled in",
+        shown().join() === "memory" && $("#memory-title").value === "Our first night in Chicago" && $("#place-query").value === "Chicago" && $("#local-date").value === "2025-01-01" && $("#local-time").value === "21:00");
+      await choosePlace("Chicago", "Illinois");
+      type("#local-time", "03:00");
+      submit();
+      await sleep(250);
+      const lateSky = visibleConstellations(catalog.lines, chicago, new Date("2025-01-01T09:00:00Z")).filter((s) => s.status !== "none"); // 3 AM on Jan 1 (CST)
+      const lateFullPlay = lateSky.filter((s) => s.status === "full" && quickAssess(s.id, catalog).playable).map((s) => s.id).sort();
+      record("exploring again at 3 AM gives the 3 AM sky, while Cassiopeia stays marked filled",
+        JSON.stringify(groupIds("group-play")) === JSON.stringify(lateFullPlay) && JSON.stringify(lateFullPlay) !== JSON.stringify(expectPlay) && /✓ Filled in/.test(cardFor("Cas", "play").closest(".constellation-card").textContent),
+        `${lateFullPlay.length} playable at 3 AM versus ${expectPlay.length} at 9 PM`);
+      type("#local-time", "21:00");
+
+      // ===== The browser's Back button =====
+      $("#edit-memory").click();
+      submit(); await sleep(150);
+      cardFor("Cas", "learn").click();
+      win.history.back();
+      await waitFor(() => shown().join() === "explore", 3000);
+      const afterFirstBack = shown().join();
+      win.history.back();
+      await waitFor(() => shown().join() === "memory", 3000);
+      const afterSecondBack = shown().join();
+      win.history.forward();
+      await waitFor(() => shown().join() === "explore", 3000);
+      record("the browser's Back and Forward buttons move between the screens", afterFirstBack === "explore" && afterSecondBack === "memory" && shown().join() === "explore", `${afterFirstBack} → ${afterSecondBack} → ${shown().join()}`);
+      record("the address never contains anything the player typed", [...new URLSearchParams(win.location.search).keys()].join() === "run" && win.location.hash === "", win.location.href.replace(/run=[\d.]+/, "run=…"));
+
+      // ===== Wallpaper =====
+      const before = win.performance.getEntriesByType("resource").map((e) => new URL(e.name).pathname.split("/").pop());
+      $("#open-wallpaper").click();
+      record("opening the wallpaper screen focuses its heading", shown().join() === "wallpaper" && doc.activeElement.id === "wallpaper-heading");
+      const wallpaperReady = await waitFor(() => !$("#wallpaper-download").disabled && $("#wallpaper-frame").dataset.ready === "true", 30000);
+      const after = win.performance.getEntriesByType("resource").map((e) => new URL(e.name).pathname.split("/").pop());
+      record("the sky library loads only now, when the wallpaper is opened",
+        !before.includes("celestial.min.js") && after.includes("celestial.min.js") && after.includes("stars.6.json"), `before: ${before.includes("celestial.min.js")}, after: ${after.includes("celestial.min.js")}`);
+      const preview = $("#wallpaper-canvas");
+      const px = preview.getContext("2d").getImageData(0, 0, preview.width, preview.height).data;
+      const colors = new Set();
+      for (let i = 0; i < px.length; i += 4 * 211) colors.add(px[i] + "," + px[i + 1] + "," + px[i + 2]);
+      record("the wallpaper preview is drawn, in the phone's shape", wallpaperReady && colors.size > 20 && Math.abs(preview.width / preview.height - 1179 / 2556) < 0.01, `${colors.size} colours, ${preview.width}×${preview.height}`);
+      const zenith = win.Celestial.zenith();
+      const expectedRa = (greenwichSiderealDegrees(new Date("2025-01-02T03:00:00Z")) + chicago.longitude + 720) % 360;
+      let raError = Math.abs(((zenith[0] + 360) % 360) - expectedRa); if (raError > 180) raError = 360 - raError;
+      record("the sky drawn is the true sky for that place and moment (zenith matches an independent calculation)", Math.max(raError, Math.abs(zenith[1] - chicago.latitude)) < 0.02,
+        `error ${Math.max(raError, Math.abs(zenith[1] - chicago.latitude)).toFixed(4)}° in browser zone ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
+
+      const cornerPixels = [];
+      const realToBlob = win.HTMLCanvasElement.prototype.toBlob;
+      win.HTMLCanvasElement.prototype.toBlob = function (...args) {
+        if (this.width === 1179 && this.height === 2556) cornerPixels.push([...this.getContext("2d").getImageData(0, 0, 1, 1).data]);
+        return realToBlob.apply(this, args);
+      };
+      let blob = null;
+      const realCreate = win.URL.createObjectURL.bind(win.URL);
+      win.URL.createObjectURL = (b) => { blob = b; return realCreate(b); };
+      win.HTMLAnchorElement.prototype.click = function () {};
+      $("#wallpaper-download").click();
+      await waitFor(() => blob !== null, 30000);
+      const head = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+      const view = new DataView(head.buffer);
+      record("Download produces a PNG of exactly 1179 × 2556", [...head.slice(0, 8)].join() === "137,80,78,71,13,10,26,10" && view.getUint32(16) === 1179 && view.getUint32(20) === 2556 && blob.size > 50000,
+        `${view.getUint32(16)} × ${view.getUint32(20)}, ${blob.size.toLocaleString()} bytes`);
+      record("the download button comes back and the player is told", await waitFor(() => !$("#wallpaper-download").disabled && /Wallpaper created/.test(text("#wallpaper-status")), 10000), text("#wallpaper-status"));
+      $("#view-wallpaper [data-action='back']").click();
+      record("Back from the wallpaper returns to the list", shown().join() === "explore");
+
+      // The mood chosen on the form styles the wallpaper
+      $("#edit-memory").click();
+      pick("mood", "energized");
+      submit();
+      await sleep(250);
+      $("#open-wallpaper").click();
+      await waitFor(() => !$("#wallpaper-download").disabled && $("#wallpaper-frame").dataset.ready === "true", 30000);
+      await sleep(400);
+      blob = null;
+      $("#wallpaper-download").click();
+      await waitFor(() => blob !== null, 30000);
+      await sleep(300);
+      const [calmCorner, energizedCorner] = [cornerPixels[0], cornerPixels[cornerPixels.length - 1]];
+      record("choosing Energized on the form gives the wallpaper its warmer palette (Calm and Energized differ at the corner)",
+        cornerPixels.length >= 2 && calmCorner.join() !== energizedCorner.join() && energizedCorner[0] > calmCorner[0], `calm ${calmCorner.slice(0, 3)} → energized ${energizedCorner.slice(0, 3)}`);
+      $("#view-wallpaper [data-action='back']").click();
+
+      // ===== Privacy =====
+      const outside = requests.filter((u) => !/geocoding-api\.open-meteo\.com\/v1\/search\?name=/.test(u) && /^https?:/.test(u) && !u.startsWith(win.location.origin));
+      const geocode = requests.filter((u) => u.includes("geocoding-api"));
+      record("the only request to anyone else is the place search, and it carries only the place text",
+        outside.length === 0 && geocode.length >= 3 && geocode.every((u) => /^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search\?name=[A-Za-z%20]+&count=8&language=en&format=json$/.test(u)) &&
+        !geocode.some((u) => /first|night|2025|21:00|calm|energized/i.test(u)), `${geocode.length} searches, ${outside.length} other outside requests`);
+      const external = win.performance.getEntriesByType("resource").filter((e) => new URL(e.name).origin !== win.location.origin);
+      record("no file is loaded from another site", external.length === 0, `${external.length} external files`);
+      record("nothing is stored: no local or session storage, no cookies", win.localStorage.length === 0 && win.sessionStorage.length === 0 && doc.cookie === "");
+
+      // ===== Accessibility and rough edges =====
+      let headingsOk = true;
+      for (const view of ["memory", "explore", "learn", "wallpaper"]) {
+        const heading = $(`#view-${view} h2`);
+        headingsOk = headingsOk && !!heading && heading.getAttribute("tabindex") === "-1" || view === "play";
+      }
+      record("every screen has a heading that can take focus, and the page has one main landmark", headingsOk && $$("main").length === 1);
+      // Contrast of the visible explore list text
+      const walker = doc.createTreeWalker(doc.querySelector("#view-explore"), NodeFilter.SHOW_TEXT);
+      let worst = Infinity, worstText = "";
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent.trim()) continue;
+        const element = node.parentElement;
+        if (element.closest("[hidden]") || element.getBoundingClientRect().height === 0) continue;
+        const color = win.getComputedStyle(element).color.match(/[\d.]+/g).slice(0, 3).map(Number);
+        const onLight = element.closest(".button-primary");
+        const ratio = contrast(color, onLight ? [175, 162, 255] : [20, 22, 58]);
+        if (ratio < worst) { worst = ratio; worstText = node.textContent.trim().slice(0, 30); }
+      }
+      record("explore-list text has at least 4.5:1 contrast", worst >= 4.5, `lowest ${worst.toFixed(1)}:1 ("${worstText}")`);
+      // Every screen on a small phone (320 px wide): nothing runs off the edge
+      frame.width = 320;
+      await sleep(400);
+      const overflowing = [];
+      const fits = () => doc.documentElement.scrollWidth <= win.innerWidth;
+      if (!fits()) overflowing.push("explore");
+      cardFor("Ori", "learn").click(); await sleep(150);
+      if (!fits()) overflowing.push("learn");
+      const dlRight = $("#learn-facts").getBoundingClientRect().right;
+      const widestValue = Math.max(...$$("#learn-facts dd").map((d) => d.getBoundingClientRect().right));
+      if (widestValue > dlRight + 1) overflowing.push("learn values");
+      $("#learn-back").click(); await sleep(100);
+      cardFor("Cas", "play").click(); await sleep(300);
+      if (!fits()) overflowing.push("play");
+      $("#view-play [data-action='back']").click(); await sleep(100);
+      $("#open-wallpaper").click(); await sleep(600);
+      if (!fits()) overflowing.push("wallpaper");
+      $("#view-wallpaper [data-action='back']").click(); await sleep(100);
+      $("#edit-memory").click(); await sleep(100);
+      if (!fits()) overflowing.push("memory");
+      record("at 320 px wide (a small iPhone) no screen scrolls sideways and the Learn values stay inside their box",
+        overflowing.length === 0, overflowing.join(", ") || "memory, explore, learn, play, and wallpaper all fit");
+      frame.width = 393;
+
+      record("no script errors occurred during the whole run", errors.length === 0, errors.slice(0, 3).join("; "));
+
+      document.getElementById("summary").textContent = (allPassed ? "PASS" : "FAIL") + " — stage B checkpoint 4 explore flow checks";
+      document.title = "DONE " + (allPassed ? "PASS" : "FAIL");
+    } catch (error) {
+      record("harness error", false, error && error.stack || String(error));
+      document.getElementById("summary").textContent = "FAIL — harness error";
+      document.title = "DONE FAIL";
+    }
+  </script>
+</body>
+</html>

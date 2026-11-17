@@ -1,0 +1,545 @@
+/* Explore page. Shared tokens, buttons, the game screen, and the win panel come from game.css. */
+
+#main {
+  display: block;
+}
+
+.site-header,
+.view,
+.site-footer,
+#load-status {
+  width: min(100% - 2rem, 46rem);
+  margin-inline: auto;
+}
+
+.site-header {
+  display: flex;
+  min-height: 4rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand {
+  display: inline-flex;
+  gap: 0.7rem;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--ink);
+  font-weight: 720;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(198, 188, 255, 0.55);
+  border-radius: 50%;
+  color: var(--violet-bright);
+  font-size: 0.85rem;
+}
+
+.view {
+  padding-block: 1.5rem 3rem;
+}
+
+.view[hidden],
+.game[hidden],
+#load-status[hidden] {
+  display: none;
+}
+
+.view h2 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.7rem, 6vw, 2.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lede {
+  max-width: 38rem;
+  margin: 0 0 1rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.privacy-note {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  margin: 0 0 1.5rem;
+  color: #83e6c0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.privacy-note span {
+  font-size: 0.5rem;
+}
+
+/* ---------- Memory form ---------- */
+
+.field {
+  min-width: 0;
+  margin-bottom: 0.9rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.42rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.field input[type="text"],
+.field input[type="date"],
+.field input[type="time"] {
+  width: 100%;
+  min-height: 2.9rem;
+  border: 1px solid rgba(198, 188, 255, 0.28);
+  border-radius: 0.7rem;
+  padding-inline: 0.8rem;
+  color: var(--ink);
+  background: #0b0d27;
+  font: inherit;
+}
+
+.field input::placeholder {
+  color: #777a99;
+}
+
+.field input[aria-invalid="true"] {
+  border-color: #ffaaa5;
+}
+
+.field-error {
+  min-height: 1.1rem;
+  margin: 0.35rem 0 0;
+  color: #ffaaa5;
+  font-size: 0.78rem;
+}
+
+.field-help {
+  margin: 0.55rem 0 1rem;
+  color: var(--faint);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.place-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+}
+
+.datetime-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.status-message {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.status-message:not(:empty) {
+  border-left: 2px solid var(--violet);
+  padding-left: 0.75rem;
+}
+
+.status-message[data-tone="error"] {
+  border-color: #ffaaa5;
+  color: #ffaaa5;
+}
+
+.status-message[data-tone="success"] {
+  border-color: #83e6c0;
+  color: #83e6c0;
+}
+
+.choice-fieldset,
+.mood-fieldset {
+  min-width: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.choice-fieldset legend,
+.mood-fieldset legend {
+  margin-bottom: 0.6rem;
+  padding: 0;
+  color: var(--violet-bright);
+  font-size: 0.78rem;
+  font-weight: 740;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.choice-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.mood-fieldset {
+  margin-top: 1.6rem;
+}
+
+.mood-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.mood-card,
+.choice-card {
+  position: relative;
+  display: grid;
+  gap: 0.7rem;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  padding: 0.85rem;
+  background: rgba(5, 7, 28, 0.4);
+  cursor: pointer;
+}
+
+.mood-card {
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+}
+
+.mood-card:has(input:checked),
+.choice-card:has(input:checked) {
+  border-color: var(--violet-bright);
+  background: rgba(156, 140, 255, 0.13);
+}
+
+.mood-card:has(input:focus-visible),
+.choice-card:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.mood-card input,
+.choice-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.mood-visual {
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+}
+
+.calm-visual {
+  background: radial-gradient(circle at 35% 35%, #e3ddff, #7769d8 26%, #151847 68%);
+  box-shadow: 0 0 1rem rgba(137, 119, 255, 0.35);
+}
+
+.energized-visual {
+  background: radial-gradient(circle at 35% 35%, #fff0ce, #ff8078 30%, #6d2c70 70%);
+  box-shadow: 0 0 1rem rgba(255, 111, 103, 0.4);
+}
+
+.mood-copy strong,
+.mood-copy small,
+.choice-copy strong,
+.choice-copy small {
+  display: block;
+}
+
+.mood-copy small,
+.choice-copy small {
+  margin-top: 0.15rem;
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+.button-secondary {
+  border: 1px solid rgba(198, 188, 255, 0.25);
+  color: var(--violet-bright);
+  background: rgba(156, 140, 255, 0.08);
+}
+
+.button-wide {
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+/* ---------- Explore list ---------- */
+
+.counts {
+  margin: 0 0 1rem;
+  color: var(--violet-bright);
+  font-weight: 650;
+}
+
+.view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.view-actions .button {
+  padding-inline: 1.1rem;
+}
+
+.group {
+  margin-bottom: 2rem;
+}
+
+.group h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.group-note {
+  margin: 0 0 0.8rem;
+  color: var(--faint);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.constellation-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 40rem) {
+  .constellation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.constellation-card {
+  display: grid;
+  gap: 0.6rem;
+  align-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: var(--panel);
+}
+
+.constellation-card h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.card-sub,
+.card-meta,
+.card-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.card-sub {
+  color: var(--faint);
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.card-note {
+  color: var(--faint);
+}
+
+.card-done {
+  color: #83e6c0;
+  font-weight: 650;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.card-actions .button {
+  flex: 1 1 6rem;
+}
+
+/* ---------- Learn ---------- */
+
+.link-button {
+  min-height: 2.75rem;
+  border: 0;
+  padding: 0;
+  color: var(--violet-bright);
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.facts-wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* label above value on a phone */
+  gap: 0;
+  max-width: 34rem;
+  margin: 0 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.4rem 1rem 1rem;
+  background: var(--panel);
+}
+
+.facts-wide dt {
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.facts-wide dd {
+  text-align: left;
+  white-space: normal; /* long values such as "about 50° above the horizon, toward the southeast" wrap */
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 40rem) {
+  .facts-wide {
+    grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+    gap: 0.6rem 1rem;
+  }
+
+  .facts-wide dt {
+    margin-top: 0;
+  }
+}
+
+.learn-note {
+  max-width: 34rem;
+  margin: 0 0 1rem;
+  color: var(--faint);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+/* ---------- Wallpaper ---------- */
+
+.phone-stage {
+  display: grid;
+  place-items: center;
+  border-radius: 1.1rem;
+  padding: 1.25rem;
+  background:
+    radial-gradient(circle at center, rgba(112, 86, 255, 0.16), transparent 60%),
+    rgba(4, 5, 20, 0.55);
+}
+
+.phone-frame {
+  position: relative;
+  width: min(calc(100% - 0.9rem), 16rem);
+  aspect-ratio: 1179 / 2556;
+  box-sizing: content-box;
+  overflow: hidden;
+  border: 0.45rem solid #23243b;
+  border-radius: 2rem;
+  background: #08091f;
+  box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.45);
+}
+
+#wallpaper-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sky-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  padding: 2rem 1.25rem;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.sky-placeholder[hidden] {
+  display: none;
+}
+
+.result-summary {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* d3-celestial draws its map into this off-screen node; the wallpaper canvas is the visible result. */
+#sky-map {
+  position: absolute;
+  left: -10000px;
+  width: 450px;
+  height: 450px;
+  overflow: hidden;
+}
+
+#celestial-form,
+#error {
+  display: none !important;
+}
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-block: 1.25rem 2rem;
+  color: var(--faint);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer a {
+  color: var(--violet-bright);
+}
+
+@media (max-width: 30rem) {
+  .place-row,
+  .datetime-row,
+  .mood-options {
+    grid-template-columns: 1fr;
+  }
+}

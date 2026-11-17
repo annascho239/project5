@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#07081a">
+    <title>Inner Orbit — Explore a memory sky</title>
+    <link rel="stylesheet" href="game.css">
+    <link rel="stylesheet" href="explore.css">
+    <script src="vendor/luxon.min.js"></script>
+    <script type="module" src="explore.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="Inner Orbit home">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span>Inner Orbit</span>
+      </a>
+    </header>
+
+    <main id="main">
+      <p id="load-status" class="status-message" role="status" aria-live="polite">Loading the constellations…</p>
+
+      <section id="view-memory" class="view" aria-labelledby="memory-heading" hidden></section>
+
+      <section id="view-explore" class="view" aria-labelledby="explore-heading" hidden>
+        <h2 id="explore-heading" tabindex="-1">Your sky</h2>
+        <p id="explore-summary" class="lede"></p>
+        <p id="explore-counts" class="counts"></p>
+        <div class="view-actions">
+          <button id="open-wallpaper" class="button button-primary" type="button">Preview and download wallpaper</button>
+          <button id="edit-memory" class="button" type="button">Change the memory</button>
+        </div>
+        <div id="explore-groups"></div>
+      </section>
+
+      <section id="view-learn" class="view" aria-labelledby="learn-heading" hidden>
+        <nav class="top-nav" aria-label="Learn"><button type="button" class="link-button" id="learn-back-top">← Back to constellations</button></nav>
+        <h2 id="learn-heading" tabindex="-1"></h2>
+        <p id="learn-lede" class="lede"></p>
+        <dl id="learn-facts" class="facts facts-wide"></dl>
+        <p class="learn-note">
+          Magnitude is how bright a star looks: smaller numbers are brighter, and the brightest stars have negative numbers.
+          The lines are the usual connect-the-dots figure for each constellation, not an official shape.
+        </p>
+        <div class="view-actions">
+          <button id="learn-play" class="button button-primary" type="button">Play this constellation</button>
+          <button id="learn-back" class="button" type="button">Back to constellations</button>
+        </div>
+      </section>
+
+      <section id="view-play" class="game" aria-labelledby="game-title" hidden></section>
+
+      <section id="view-wallpaper" class="view" aria-labelledby="wallpaper-heading" hidden></section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Star data: XHIP via d3-celestial. Constellation names and lines: IAU constellation charts as adjusted by the d3-celestial author.
+        Place search: <a href="https://open-meteo.com/en/docs/geocoding-api">Open-Meteo Geocoding</a> (data from <a href="https://www.geonames.org/">GeoNames</a>, CC BY 4.0).
+        Details and licenses: <a href="vendor/THIRD_PARTY.md">vendor/THIRD_PARTY.md</a>.
+        The sky is an astronomical interpretation, not a photograph.
+      </p>
+    </footer>
+  </body>
+</html>
